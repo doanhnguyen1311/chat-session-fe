@@ -1,5 +1,6 @@
 import path from "node:path";
 import { app, BrowserWindow, ipcMain, Menu, Notification } from "electron";
+import { checkForUpdates, configureAutoUpdater } from "./updater";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -36,11 +37,18 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
+  configureAutoUpdater();
   createWindow();
+  setTimeout(() => {
+    void checkForUpdates();
+  }, 1500);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
+      setTimeout(() => {
+        void checkForUpdates();
+      }, 1500);
     }
   });
 });

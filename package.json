@@ -16,9 +16,18 @@
   "build": {
     "appId": "vn.anonymous-chat.session",
     "productName": "Session Chat",
+    "artifactName": "Session-Chat-Setup-${version}.${ext}",
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "doanhnguyen1311",
+        "repo": "chat-session-fe",
+        "releaseType": "release"
+      }
+    ],
     "files": [
       "dist/**/*",
       "package.json"
@@ -29,7 +38,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
     }
   },
   "dependencies": {
@@ -38,6 +48,7 @@
     "autoprefixer": "^10.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.3",
     "framer-motion": "^12.39.0",
     "lucide-react": "^0.468.0",
     "postcss": "^8.5.15",

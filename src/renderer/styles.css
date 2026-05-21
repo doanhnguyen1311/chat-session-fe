@@ -207,6 +207,11 @@ input:focus-visible {
   height: 40px;
 }
 
+.secondary-button.compact {
+  min-height: 36px;
+  height: 36px;
+}
+
 .primary-button:disabled {
   cursor: wait;
   opacity: .62;
@@ -844,6 +849,86 @@ h2 {
   color: var(--danger);
 }
 
+.update-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 70;
+  width: min(680px, calc(100vw - 28px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-2) 94%, transparent);
+  box-shadow: var(--shadow-premium);
+  backdrop-filter: blur(22px) saturate(145%);
+  transform: translateX(-50%);
+}
+
+.update-banner-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.update-banner-main strong {
+  display: block;
+  font-size: 13px;
+}
+
+.update-banner-main p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.update-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.update-banner-error {
+  border-color: color-mix(in srgb, var(--danger) 24%, transparent);
+}
+
+.update-banner-error .update-icon {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.update-progress {
+  grid-column: 1 / -1;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+}
+
+.update-progress span {
+  display: block;
+  height: 100%;
+  min-width: 4px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width .18s var(--ease);
+}
+
+.update-spin {
+  animation: spin 1s linear infinite;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1070,6 +1155,12 @@ h2 {
 
 @keyframes shimmer {
   100% { transform: translateX(100%); }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes pulseDots {
