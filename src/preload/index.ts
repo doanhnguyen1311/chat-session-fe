@@ -20,6 +20,7 @@ const electronAPI = {
   updater: {
     getStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("update:get-status"),
     check: (): Promise<UpdateStatus> => ipcRenderer.invoke("update:check"),
+    download: (): Promise<UpdateStatus> => ipcRenderer.invoke("update:download"),
     restartAndInstall: (): Promise<boolean> => ipcRenderer.invoke("update:restart-and-install"),
     onStatus: (callback: (status: UpdateStatus) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, status: UpdateStatus): void => callback(status);

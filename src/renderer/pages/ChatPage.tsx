@@ -28,6 +28,7 @@ import { MessageBubble } from "../components/MessageBubble";
 import { OnlineUsers } from "../components/OnlineUsers";
 import { RoomsSidebar } from "../components/RoomsSidebar";
 import { Toast, ToastHost } from "../components/ToastHost";
+import { UpdateSettings } from "../components/UpdateSettings";
 
 type Props = {
   state: AppState;
@@ -616,12 +617,25 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         ) : null}
 
         {settingsOpen ? (
-          <motion.div className="floating-panel" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}>
+          <motion.div className="floating-panel settings-panel" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}>
             <h2>Settings</h2>
-            <p>Theme, motion and desktop presentation.</p>
-            <button className="secondary-button" type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-              Switch to {theme === "dark" ? "light" : "dark"} mode
-            </button>
+            <p>Theme, startup behavior and app updates.</p>
+            <div className="settings-section">
+              <div>
+                <strong>Theme</strong>
+                <p>Current mode: {theme}</p>
+              </div>
+              <button className="secondary-button compact" type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+                Switch to {theme === "dark" ? "light" : "dark"}
+              </button>
+            </div>
+            <div className="settings-section">
+              <div>
+                <strong>Startup</strong>
+                <p>Session Chat opens automatically when Windows starts.</p>
+              </div>
+            </div>
+            <UpdateSettings />
           </motion.div>
         ) : null}
 

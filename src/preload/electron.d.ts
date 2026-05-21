@@ -19,6 +19,7 @@ declare global {
       updater: {
         getStatus: () => Promise<UpdateStatus>;
         check: () => Promise<UpdateStatus>;
+        download: () => Promise<UpdateStatus>;
         restartAndInstall: () => Promise<boolean>;
         onStatus: (callback: (status: UpdateStatus) => void) => () => void;
       };

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AccountPage } from "./pages/AccountPage";
 import { ChatPage } from "./pages/ChatPage";
-import { UpdateBanner } from "./components/UpdateBanner";
 import { LoginPage } from "./pages/LoginPage";
 import { api } from "./services/api";
 import type { AccountAuthResponse, JoinResponse } from "./types/chat";
@@ -97,33 +96,20 @@ export function App(): JSX.Element {
   }
 
   if (!state.account) {
-    return (
-      <>
-        <AccountPage onAuthenticated={applyAccountAuth} />
-        <UpdateBanner />
-      </>
-    );
+    return <AccountPage onAuthenticated={applyAccountAuth} />;
   }
 
   if (state.rooms.length === 0 || !activeRoom) {
-    return (
-      <>
-        <LoginPage onJoined={upsertRoom} defaultDisplayName={state.displayName} accountToken={state.account.accountToken} />
-        <UpdateBanner />
-      </>
-    );
+    return <LoginPage onJoined={upsertRoom} defaultDisplayName={state.displayName} accountToken={state.account.accountToken} />;
   }
 
   return (
-    <>
-      <ChatPage
-        state={state}
-        activeRoom={activeRoom}
-        onStateChange={setState}
-        onJoined={upsertRoom}
-        onLogout={() => setState(emptyState)}
-      />
-      <UpdateBanner />
-    </>
+    <ChatPage
+      state={state}
+      activeRoom={activeRoom}
+      onStateChange={setState}
+      onJoined={upsertRoom}
+      onLogout={() => setState(emptyState)}
+    />
   );
 }
