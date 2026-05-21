@@ -30,6 +30,17 @@ import { RoomsSidebar } from "../components/RoomsSidebar";
 import { Toast, ToastHost } from "../components/ToastHost";
 import { UpdateSettings } from "../components/UpdateSettings";
 
+const MESSAGE_PAGE_SIZE = 20;
+const REACTION_LABELS = {
+  like: { icon: "👍", label: "Thích" },
+  love: { icon: "❤️", label: "Yêu thích" },
+  care: { icon: "🤗", label: "Thương thương" },
+  sad: { icon: "😢", label: "Buồn" },
+  angry: { icon: "😡", label: "Tức giận" },
+  cry: { icon: "😭", label: "Khóc" },
+  sick: { icon: "🤢", label: "Buồn nôn" }
+} as const;
+
 type Props = {
   state: AppState;
   activeRoom: RoomAuth;
@@ -40,12 +51,14 @@ type Props = {
 
 export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout }: Props): JSX.Element {
   const [messagesByRoom, setMessagesByRoom] = useState<Record<string, Message[]>>({});
+  const [hasMoreMessagesByRoom, setHasMoreMessagesByRoom] = useState<Record<string, boolean>>({});
+  const [loadingMoreByRoom, setLoadingMoreByRoom] = useState<Record<string, boolean>>({});
   const [onlineByRoom, setOnlineByRoom] = useState<Record<string, OnlineUser[]>>({});
   const [draft, setDraft] = useState("");
   const [connected, setConnected] = useState(socket.connected);
-  const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
+  const [typingUsers, setTypingUsers] = useState<Record<string, Record<string, string>>>({});
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [groupModal, setGroupModal] = useState<"create" | "join" | null>(null);
+  const [groupModal, setGroupModal] = useState<"create" | "join" | "direct" | null>(null);
   const [groupTitle, setGroupTitle] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [groupBusy, setGroupBusy] = useState(false);
@@ -62,10 +75,18 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
   const [profileAvatar, setProfileAvatar] = useState<File | null>(null);
   const [profileBusy, setProfileBusy] = useState(false);
   const [mentionOpen, setMentionOpen] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [reactionViewer, setReactionViewer] = useState<Message | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const typingTimer = useRef<number | null>(null);
   const toastTimers = useRef<number[]>([]);
+  const loadingMoreRef = useRef<Record<string, boolean>>({});
+  const shouldStickToBottomRef = useRef(true);
+  const loadedRoomsRef = useRef<Set<string>>(new Set());
+  const roomsRef = useRef(state.rooms);
+  const activeRoomIdRef = useRef(activeRoom.session.id);
 
   const toast = useCallback((message: string, tone: Toast["tone"] = "info") => {
     const id = crypto.randomUUID();
@@ -75,6 +96,11 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     }, 500);
     toastTimers.current.push(timer);
   }, []);
+
+  useEffect(() => {
+    roomsRef.current = state.rooms;
+    activeRoomIdRef.current = activeRoom.session.id;
+  }, [activeRoom.session.id, state.rooms]);
 
   useEffect(() => {
     return () => {
@@ -93,11 +119,14 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
 
   useEffect(() => {
     for (const room of state.rooms) {
-      void api.messages(room.token).then((result) => {
+      if (loadedRoomsRef.current.has(room.session.id)) continue;
+      loadedRoomsRef.current.add(room.session.id);
+      void api.messages(room.token, { limit: MESSAGE_PAGE_SIZE }).then((result) => {
         setMessagesByRoom((current) => ({ ...current, [room.session.id]: result.messages }));
+        setHasMoreMessagesByRoom((current) => ({ ...current, [room.session.id]: result.messages.length === MESSAGE_PAGE_SIZE }));
       });
     }
-  }, [state.rooms.map((room) => room.session.id).join("|")]);
+  }, [state.rooms.map((room) => `${room.session.id}:${room.token}`).join("|")]);
 
   useEffect(() => {
     const syncOnlineUsers = (): void => {
@@ -118,7 +147,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
 
     const resumeAll = (): void => {
       setConnected(true);
-      for (const room of state.rooms) {
+      for (const room of roomsRef.current) {
         client.emit("auth:resume", { token: room.token });
       }
     };
@@ -132,8 +161,9 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         [message.sessionId]: [...(current[message.sessionId] ?? []), message]
       }));
 
-      const room = state.rooms.find((item) => item.session.id === message.sessionId);
-      if (message.sessionId !== activeRoom.session.id) {
+      const room = roomsRef.current.find((item) => item.session.id === message.sessionId);
+      const active = await (window.electronAPI?.isWindowActive?.() ?? Promise.resolve(!document.hidden));
+      if (message.senderId !== room?.user.id && (message.sessionId !== activeRoomIdRef.current || !active || document.hidden)) {
         onStateChange((current) => ({
           ...current,
           rooms: current.rooms.map((item) =>
@@ -144,9 +174,8 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
 
       if (message.senderId !== room?.user.id) {
         playNotificationSound();
-        const active = await window.electronAPI.isWindowActive();
         if (!active) {
-          await window.electronAPI.showNotification({
+          await window.electronAPI?.showNotification?.({
             title: `${room?.session.name ?? "Chat"} - ${message.senderName}`,
             body: message.content
               ? message.content.length > 90
@@ -156,6 +185,15 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
           });
         }
       }
+    };
+
+    const onMessageUpdated = (payload: { sessionId: string; message: Message }): void => {
+      setMessagesByRoom((current) => ({
+        ...current,
+        [payload.sessionId]: (current[payload.sessionId] ?? []).map((message) =>
+          message.id === payload.message.id ? payload.message : message
+        )
+      }));
     };
 
     const onMessageStored = (payload: { tempId: string; message: Message }): void => {
@@ -173,19 +211,19 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
 
     const onTyping = (payload: TypingUser): void => {
       setTypingUsers((current) => {
-        const next = { ...current };
-        if (payload.isTyping) next[payload.userId] = payload.displayName;
-        else delete next[payload.userId];
-        return next;
+        const roomTyping = { ...(current[payload.sessionId] ?? {}) };
+        if (payload.isTyping) roomTyping[payload.userId] = payload.displayName;
+        else delete roomTyping[payload.userId];
+        return { ...current, [payload.sessionId]: roomTyping };
       });
     };
 
     const onUserJoined = (payload: { sessionId: string; user: OnlineUser }): void => {
-      const room = state.rooms.find((item) => item.session.id === payload.sessionId);
+      const room = roomsRef.current.find((item) => item.session.id === payload.sessionId);
       if (payload.user.id !== room?.user.id) {
         toast(`${payload.user.displayName} joined ${room?.session.name ?? "this room"}`);
       }
-      const token = state.rooms.find((item) => item.session.id === payload.sessionId)?.token;
+      const token = roomsRef.current.find((item) => item.session.id === payload.sessionId)?.token;
       if (token) {
         void api.onlineUsers(token).then((result) => {
           setOnlineByRoom((current) => ({ ...current, [payload.sessionId]: result.users }));
@@ -201,7 +239,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     };
 
     const onKicked = (payload: { sessionId: string }): void => {
-      const kickedRoom = state.rooms.find((room) => room.session.id === payload.sessionId);
+      const kickedRoom = roomsRef.current.find((room) => room.session.id === payload.sessionId);
       toast("You were kicked from this room", "error");
       onStateChange((current) => {
         const rooms = current.rooms.filter((room) => room.session.id !== payload.sessionId);
@@ -214,10 +252,43 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
       if (kickedRoom) socket.emit("user:leave");
     };
 
+    const onRead = (payload: { sessionId: string; messages: Message[] }): void => {
+      setMessagesByRoom((current) => ({
+        ...current,
+        [payload.sessionId]: (current[payload.sessionId] ?? []).map((message) =>
+          payload.messages.find((item) => item.id === message.id) ?? message
+        )
+      }));
+    };
+
+    const onAdminTransferred = (payload: { sessionId: string; previousAdminId: string; newAdminId: string }): void => {
+      onStateChange((current) => ({
+        ...current,
+        rooms: current.rooms.map((room) =>
+          room.session.id === payload.sessionId
+            ? {
+                ...room,
+                user: {
+                  ...room.user,
+                  isAdmin: room.user.id === payload.newAdminId,
+                  role: room.user.id === payload.newAdminId ? "ADMIN" : "MEMBER"
+                }
+              }
+            : room
+        )
+      }));
+      const token = roomsRef.current.find((item) => item.session.id === payload.sessionId)?.token;
+      if (token) {
+        void api.onlineUsers(token).then((result) => {
+          setOnlineByRoom((current) => ({ ...current, [payload.sessionId]: result.users }));
+        });
+      }
+    };
+
     const onMessageError = (payload: { message?: string }): void => toast(payload.message ?? "Failed to send message", "error");
     const onAdminError = (payload: { message?: string }): void => toast(payload.message ?? "Admin action failed", "error");
     const onUserLeft = (payload: { sessionId: string; user: { id: string; displayName?: string } }): void => {
-      const room = state.rooms.find((item) => item.session.id === payload.sessionId);
+      const room = roomsRef.current.find((item) => item.session.id === payload.sessionId);
       if (payload.user.id !== room?.user.id && payload.user.displayName) {
         toast(`${payload.user.displayName} left ${room?.session.name ?? "this room"}`);
       }
@@ -228,6 +299,9 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     client.on("auth:success", onAuthSuccess);
     client.on("message:new", onMessage);
     client.on("message:stored", onMessageStored);
+    client.on("message:updated", onMessageUpdated);
+    client.on("message:read", onRead);
+    client.on("admin:transferred", onAdminTransferred);
     client.on("user:joined", onUserJoined);
     client.on("user:left", onUserLeft);
     client.on("user:online-list", onOnlineList);
@@ -246,6 +320,9 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
       client.off("auth:success", onAuthSuccess);
       client.off("message:new", onMessage);
       client.off("message:stored", onMessageStored);
+      client.off("message:updated", onMessageUpdated);
+      client.off("message:read", onRead);
+      client.off("admin:transferred", onAdminTransferred);
       client.off("user:joined", onUserJoined);
       client.off("user:left", onUserLeft);
       client.off("user:online-list", onOnlineList);
@@ -254,12 +331,14 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
       client.off("message:error", onMessageError);
       client.off("admin:error", onAdminError);
     };
-  }, [activeRoom.session.id, onStateChange, state.account?.accountToken, state.rooms, toast]);
+  }, [onStateChange, state.account?.accountToken, toast]);
 
   const messages = messagesByRoom[activeRoom.session.id] ?? [];
   const visibleMessages = searchQuery.trim()
     ? messages.filter((message) => message.content.toLowerCase().includes(searchQuery.trim().toLowerCase()))
     : messages;
+  const messageById = useMemo(() => new Map(messages.map((message) => [message.id, message])), [messages]);
+
   const messageVirtualizer = useVirtualizer({
     count: visibleMessages.length,
     getScrollElement: () => listRef.current,
@@ -267,22 +346,98 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     overscan: 8
   });
 
+  const loadOlderMessages = useCallback(async (): Promise<void> => {
+    const roomId = activeRoom.session.id;
+    const oldestMessage = messages[0];
+    if (!oldestMessage || !hasMoreMessagesByRoom[roomId] || loadingMoreRef.current[roomId] || searchQuery.trim()) return;
+
+    const list = listRef.current;
+    const previousScrollHeight = list?.scrollHeight ?? 0;
+    loadingMoreRef.current[roomId] = true;
+    setLoadingMoreByRoom((current) => ({ ...current, [roomId]: true }));
+    try {
+      const result = await api.messages(activeRoom.token, { limit: MESSAGE_PAGE_SIZE, cursor: oldestMessage.id });
+      setMessagesByRoom((current) => {
+        const existing = current[roomId] ?? [];
+        const existingIds = new Set(existing.map((message) => message.id));
+        return { ...current, [roomId]: [...result.messages.filter((message) => !existingIds.has(message.id)), ...existing] };
+      });
+      setHasMoreMessagesByRoom((current) => ({ ...current, [roomId]: result.messages.length === MESSAGE_PAGE_SIZE }));
+      window.requestAnimationFrame(() => {
+        if (list) list.scrollTop = list.scrollHeight - previousScrollHeight;
+      });
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Could not load older messages", "error");
+    } finally {
+      loadingMoreRef.current[roomId] = false;
+      setLoadingMoreByRoom((current) => ({ ...current, [roomId]: false }));
+    }
+  }, [activeRoom.session.id, activeRoom.token, hasMoreMessagesByRoom, messages, searchQuery, toast]);
+
   useEffect(() => {
+    if (!shouldStickToBottomRef.current) return;
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [activeRoom.session.id, messagesByRoom[activeRoom.session.id]?.length, visibleMessages.length]);
 
+  useEffect(() => {
+    const totalUnread = state.rooms.reduce((total, room) => total + room.unread, 0);
+    void window.electronAPI?.setUnreadBadge?.(totalUnread);
+  }, [state.rooms]);
+
+  useEffect(() => {
+    const markVisibleMessagesRead = async (): Promise<void> => {
+      const active = await (window.electronAPI?.isWindowActive?.() ?? Promise.resolve(!document.hidden));
+      if (!active || document.hidden) return;
+      const unreadMessageIds = messages
+        .filter((message) => message.senderId !== activeRoom.user.id)
+        .filter((message) => !(message.reads ?? []).some((read) => read.userId === activeRoom.user.id))
+        .map((message) => message.id)
+        .filter((id) => !id.startsWith("tmp-"));
+      if (unreadMessageIds.length > 0) {
+        socket.emit("message:read", { token: activeRoom.token, messageIds: unreadMessageIds });
+      }
+    };
+
+    void markVisibleMessagesRead();
+    const onVisibilityChange = (): void => {
+      void markVisibleMessagesRead();
+    };
+    window.addEventListener("focus", onVisibilityChange);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", onVisibilityChange);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [activeRoom.token, activeRoom.user.id, messages]);
+
+  const isDirectRoom = activeRoom.session.kind === "DIRECT";
   const onlineUsers = onlineByRoom[activeRoom.session.id] ?? [];
+  const displayNameByUserId = useMemo(() => {
+    const names = new Map<string, string>(onlineUsers.map((user) => [user.id, user.displayName]));
+    names.set(activeRoom.user.id, activeRoom.user.displayName);
+    return names;
+  }, [activeRoom.user.displayName, activeRoom.user.id, onlineUsers]);
   const mentionQuery = draft.match(/(^|\s)@([\p{L}\p{N}_.-]*)$/u)?.[2]?.toLowerCase() ?? "";
   const mentionUsers = onlineUsers
     .filter((user) => user.id !== activeRoom.user.id)
     .filter((user) => user.displayName.toLowerCase().replace(/\s+/g, "_").includes(mentionQuery))
     .slice(0, 6);
   const typingLabel = useMemo(() => {
-    const names = Object.values(typingUsers).filter((name) => name !== activeRoom.user.displayName);
+    const names = Object.values(typingUsers[activeRoom.session.id] ?? {}).filter((name) => name !== activeRoom.user.displayName);
     return names.length ? `${names.slice(0, 2).join(", ")} ${names.length > 2 ? "and others " : ""}typing...` : "";
-  }, [typingUsers, activeRoom.user.displayName]);
+  }, [typingUsers, activeRoom.session.id, activeRoom.user.displayName]);
+
+  function handleMessageScroll(): void {
+    const list = listRef.current;
+    if (!list) return;
+    shouldStickToBottomRef.current = list.scrollHeight - list.scrollTop - list.clientHeight < 96;
+    if (list.scrollTop < 96) {
+      void loadOlderMessages();
+    }
+  }
 
   function selectRoom(roomId: string): void {
+    shouldStickToBottomRef.current = true;
     onStateChange((current) => ({
       ...current,
       activeRoomId: roomId,
@@ -291,18 +446,18 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     }));
   }
 
-  async function createRoom(titleInput: string): Promise<void> {
+  async function createRoom(titleInput: string, kind: "GROUP" | "DIRECT" = "GROUP"): Promise<void> {
     const title = titleInput.trim();
     if (!title) return;
-    const created = await api.createAccessKey({ label: title, sessionName: title });
+    const created = await api.createAccessKey({ label: title, sessionName: title, kind });
     const joined = await api.join({
       accessKey: created.accessKey.accessKey,
       displayName: state.account?.account.displayName ?? activeRoom.user.displayName,
       accountToken: state.account?.accountToken
     });
     connectSocket(state.account?.accountToken).emit("auth:resume", { token: joined.token });
-    onJoined({ ...joined, accessKey: created.accessKey.accessKey });
-    toast("Group created");
+    onJoined({ ...joined, accessKey: joined.session.id });
+    toast(kind === "DIRECT" ? "Direct chat created" : "Group created");
   }
 
   async function joinRoom(keyInput: string): Promise<void> {
@@ -323,7 +478,10 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     setGroupBusy(true);
     try {
       if (groupModal === "create") {
-        await createRoom(groupTitle);
+        await createRoom(groupTitle, "GROUP");
+        setGroupTitle("");
+      } else if (groupModal === "direct") {
+        await createRoom(groupTitle, "DIRECT");
         setGroupTitle("");
       } else if (groupModal === "join") {
         await joinRoom(joinCode);
@@ -351,11 +509,44 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     event.preventDefault();
     const content = draft.trim();
     if (!content && attachments.length === 0) return;
-    socket.emit("message:send", { token: activeRoom.token, content, attachments });
+    socket.emit("message:send", { token: activeRoom.token, content, attachments, replyToId: replyingTo?.id });
     socket.emit("user:typing", { token: activeRoom.token, isTyping: false });
     setDraft("");
     setAttachments([]);
     setMentionOpen(false);
+    setReplyingTo(null);
+  }
+
+  function jumpToMessage(messageId: string): void {
+    const index = visibleMessages.findIndex((message) => message.id === messageId);
+    if (index >= 0) {
+      messageVirtualizer.scrollToIndex(index, { align: "center" });
+      window.setTimeout(() => document.getElementById(`message-${messageId}`)?.classList.add("message-highlight"), 60);
+      window.setTimeout(() => document.getElementById(`message-${messageId}`)?.classList.remove("message-highlight"), 1400);
+      return;
+    }
+    toast("Original message is not loaded yet", "info");
+  }
+
+  function reactToMessage(messageId: string, reaction: string): void {
+    socket.emit("message:react", { token: activeRoom.token, messageId, reaction: reaction || null });
+  }
+
+  function pinMessage(message: Message): void {
+    socket.emit("message:pin", { token: activeRoom.token, messageId: message.id, pinned: !message.pinned });
+  }
+
+  function revokeOwnMessage(message: Message): void {
+    socket.emit("message:revoke", { token: activeRoom.token, messageId: message.id });
+  }
+
+  function forwardMessage(message: Message): void {
+    const candidates = state.rooms.filter((room) => room.session.id !== activeRoom.session.id);
+    const targetName = window.prompt(`Forward to room:\n${candidates.map((room) => room.session.name).join("\n")}`);
+    const target = candidates.find((room) => room.session.name === targetName);
+    if (target) {
+      socket.emit("message:forward", { token: activeRoom.token, targetToken: target.token, messageId: message.id });
+    }
   }
 
   async function copyText(text: string, message = "Copied message"): Promise<void> {
@@ -416,7 +607,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         rooms: result.rooms.length
           ? result.rooms.map((room) => {
               const previous = current.rooms.find((item) => item.session.id === room.session.id);
-              return { ...room, accessKey: previous?.accessKey, unread: previous?.unread ?? 0 };
+              return { ...room, accessKey: previous?.accessKey ?? room.session.id, unread: previous?.unread ?? 0 };
             })
           : current.rooms,
         activeRoomId: current.activeRoomId
@@ -440,6 +631,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         onSelect={selectRoom}
         onCreate={() => setGroupModal("create")}
         onJoin={() => setGroupModal("join")}
+        onCreateDirect={() => setGroupModal("direct")}
         onLogout={onLogout}
       />
 
@@ -447,9 +639,15 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         <header className="chat-header">
           <div>
             <h1>{activeRoom.session.name}</h1>
-            <p>Signed in as {activeRoom.user.displayName}{activeRoom.user.isAdmin ? " - Admin" : ""}</p>
-            {activeRoom.accessKey ? (
-              <button className="share-key" type="button" onClick={() => void copyText(activeRoom.accessKey ?? "", "Copied access key")}>
+            <p>Signed in as {activeRoom.user.displayName}{!isDirectRoom && activeRoom.user.isAdmin ? " - Admin" : ""}</p>
+            {!isDirectRoom && activeRoom.user.isAdmin ? (
+              <button className="share-key" type="button" onClick={() => void copyText(activeRoom.session.id, "Copied chat id")}>
+                <Copy size={14} />
+                Chat ID: {activeRoom.session.id}
+              </button>
+            ) : null}
+            {!isDirectRoom && activeRoom.accessKey ? (
+              <button className="share-key" type="button" onClick={() => void copyText(activeRoom.accessKey ?? "", "Copied join code")}>
                 <Copy size={14} />
                 Join code: {activeRoom.accessKey}
               </button>
@@ -478,7 +676,8 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
           </div>
         </header>
 
-        <div className="message-list" ref={listRef}>
+        <div className="message-list" ref={listRef} onScroll={handleMessageScroll}>
+          {loadingMoreByRoom[activeRoom.session.id] ? <div className="typing-line">Loading older messages...</div> : null}
           {visibleMessages.length === 0 ? (
             <div className="floating-panel empty-state-panel" style={{ position: "static", width: "min(420px, 100%)", margin: "auto" }}>
               <h2>{searchQuery ? "No messages found" : "No messages yet"}</h2>
@@ -495,11 +694,26 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
                 <div
                   className="virtual-message-row"
                   data-index={virtualRow.index}
+                  id={`message-${message.id}`}
                   key={message.id}
                   ref={messageVirtualizer.measureElement}
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                 >
-                  <MessageBubble message={message} own={message.senderId === activeRoom.user.id} onCopy={copyText} />
+                  <MessageBubble
+                    message={message}
+                    own={message.senderId === activeRoom.user.id}
+                    currentUserId={activeRoom.user.id}
+                    repliedMessage={message.replyToId ? messageById.get(message.replyToId) ?? message.replyTo ?? undefined : undefined}
+                    onCopy={copyText}
+                    onReply={setReplyingTo}
+                    onReact={reactToMessage}
+                    onPin={pinMessage}
+                    onRevoke={revokeOwnMessage}
+                    onForward={forwardMessage}
+                    onImageOpen={setImagePreview}
+                    onJumpToMessage={jumpToMessage}
+                    onReactionSummaryOpen={setReactionViewer}
+                  />
                 </div>
               );
             })}
@@ -507,6 +721,17 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         </div>
 
         <div className="typing-line">{typingLabel}</div>
+
+        {replyingTo ? (
+          <div className="attachment-strip">
+            <div className="attachment-pill">
+              <span>Replying to {replyingTo.senderName}: {replyingTo.content || "attachment"}</span>
+              <button type="button" onClick={() => setReplyingTo(null)}>
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {attachments.length ? (
           <div className="attachment-strip">
@@ -577,8 +802,9 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
       <OnlineUsers
         users={onlineUsers}
         currentUserId={activeRoom.user.id}
-        canKick={activeRoom.user.isAdmin}
+        canKick={!isDirectRoom && activeRoom.user.isAdmin}
         onKick={(userId) => socket.emit("user:kick", { token: activeRoom.token, targetUserId: userId })}
+        onTransferAdmin={(userId) => socket.emit("admin:transfer", { token: activeRoom.token, targetUserId: userId })}
       />
       <ToastHost toasts={toasts} />
 
@@ -595,7 +821,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
               </span>
               <div>
                 <strong>{state.account?.account.username}</strong>
-                <p>{activeRoom.user.role}</p>
+                <p>{isDirectRoom ? "Direct chat" : activeRoom.user.role}</p>
               </div>
             </div>
             <label className="field">
@@ -655,13 +881,13 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         <motion.div className="modal-backdrop" role="presentation" onMouseDown={() => setGroupModal(null)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <motion.form className="group-modal" onSubmit={handleGroupSubmit} onMouseDown={(event) => event.stopPropagation()} initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
             <div>
-              <h2>{groupModal === "create" ? "Create group" : "Join group"}</h2>
-              <p>{groupModal === "create" ? "Create a new chat group and share its join code." : "Enter a group join code."}</p>
+              <h2>{groupModal === "direct" ? "New direct chat" : groupModal === "create" ? "Create group" : "Join group"}</h2>
+              <p>{groupModal === "direct" ? "Create a private 1-1 chat space." : groupModal === "create" ? "Create a new chat group and share its join code." : "Enter a group join code."}</p>
             </div>
 
-            {groupModal === "create" ? (
+            {groupModal === "create" || groupModal === "direct" ? (
               <label className="field">
-                <span>Group name</span>
+                <span>{groupModal === "direct" ? "Direct chat name" : "Group name"}</span>
                 <div className="input-wrap">
                   <input
                     value={groupTitle}
@@ -690,7 +916,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
                 Cancel
               </button>
               <button className="primary-button compact" type="submit" disabled={groupBusy}>
-                {groupBusy ? "Please wait..." : groupModal === "create" ? "Create group" : "Join group"}
+                {groupBusy ? "Please wait..." : groupModal === "direct" ? "Create direct chat" : groupModal === "create" ? "Create group" : "Join group"}
               </button>
             </div>
           </motion.form>
@@ -705,6 +931,41 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
               <input autoFocus value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search messages in this room" />
             </div>
             <p>{visibleMessages.length} messages visible</p>
+          </div>
+        </div>
+      ) : null}
+
+      {reactionViewer ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setReactionViewer(null)}>
+          <div className="group-modal reaction-viewer-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-header-line">
+              <div>
+                <h2>Reactions</h2>
+                <p>{reactionViewer.senderName}'s message</p>
+              </div>
+              <button className="secondary-button compact" type="button" onClick={() => setReactionViewer(null)}>Close</button>
+            </div>
+            <div className="reaction-viewer-list">
+              {Object.entries(reactionViewer.reactions ?? {}).map(([userId, reaction]) => {
+                const reactionInfo = REACTION_LABELS[reaction];
+                return (
+                  <div className="reaction-viewer-row" key={`${userId}-${reaction}`}>
+                    <span>{reactionInfo.icon}</span>
+                    <strong>{displayNameByUserId.get(userId) ?? "Unknown user"}</strong>
+                    <em>{reactionInfo.label}</em>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {imagePreview ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setImagePreview(null)}>
+          <div className="image-preview-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <button className="secondary-button compact" type="button" onClick={() => setImagePreview(null)}>Close</button>
+            <img src={imagePreview} alt="Preview" />
           </div>
         </div>
       ) : null}

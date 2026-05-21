@@ -64,7 +64,7 @@ export function App(): JSX.Element {
   );
 
   function applyAccountAuth(result: AccountAuthResponse): void {
-    const rooms = result.rooms.map((room) => ({ ...room, unread: 0 }));
+    const rooms = result.rooms.map((room) => ({ ...room, accessKey: room.accessKey ?? room.session.id, unread: 0 }));
     setState((current) => ({
       ...current,
       account: {
@@ -84,7 +84,7 @@ export function App(): JSX.Element {
   function upsertRoom(room: JoinResponse): void {
     setState((current) => {
       const rooms = current.rooms.filter((item) => item.session.id !== room.session.id);
-      const nextRoom: RoomAuth = { ...room, unread: 0 };
+      const nextRoom: RoomAuth = { ...room, accessKey: room.accessKey ?? room.session.id, unread: 0 };
       return {
         ...current,
         displayName: room.user.displayName,

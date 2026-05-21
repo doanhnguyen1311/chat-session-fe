@@ -26,7 +26,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
-  createAccessKey: (payload: { label: string; sessionName?: string }) =>
+  createAccessKey: (payload: { label: string; sessionName?: string; kind?: "GROUP" | "DIRECT" }) =>
     request<CreateAccessKeyResponse>("/access-keys", {
       method: "POST",
       body: JSON.stringify(payload)
@@ -63,8 +63,11 @@ export const api = {
       body: form
     });
   },
-  messages: (token: string) =>
-    request<{ messages: Message[] }>(`/messages?token=${encodeURIComponent(token)}&limit=50`),
+  messages: (token: string, params?: { limit?: number; cursor?: string }) => {
+    const search = new URLSearchParams({ token, limit: String(params?.limit ?? 20) });
+    if (params?.cursor) search.set("cursor", params.cursor);
+    return request<{ messages: Message[] }>(`/messages?${search.toString()}`);
+  },
   onlineUsers: (token: string) =>
     request<{ users: OnlineUser[] }>(`/online-users?token=${encodeURIComponent(token)}`),
   health: () => request<{ ok: boolean }>("/health")

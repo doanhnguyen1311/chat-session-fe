@@ -410,7 +410,7 @@ h2 {
 .rooms-sidebar {
   height: 100%;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, .8fr) minmax(0, 1.2fr) auto;
   gap: 14px;
   padding: 14px;
   border-radius: var(--radius-xl);
@@ -491,6 +491,21 @@ h2 {
   outline: 0;
   background: transparent;
   color: var(--text);
+}
+
+.room-section {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.room-section-title {
+  color: var(--subtle);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 
 .room-list,
@@ -660,7 +675,6 @@ h2 {
   position: relative;
   padding: 20px 22px;
   scroll-behavior: smooth;
-  content-visibility: auto;
   background:
     linear-gradient(var(--surface), var(--surface)) padding-box,
     linear-gradient(180deg, color-mix(in srgb, var(--surface-2) 60%, transparent), transparent) border-box;
@@ -675,10 +689,17 @@ h2 {
   position: absolute;
   top: 0;
   left: 0;
+  z-index: 1;
   width: 100%;
   padding-bottom: 10px;
   display: flex;
   flex-direction: column;
+  overflow: visible;
+}
+
+.virtual-message-row:hover,
+.virtual-message-row:focus-within {
+  z-index: 10;
 }
 
 .message {
@@ -724,6 +745,122 @@ h2 {
   margin: 0;
   line-height: 1.5;
   font-size: 14px;
+}
+
+.read-receipts,
+.reply-preview,
+.revoked-message {
+  display: block;
+  margin-top: 6px;
+  color: var(--subtle);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.reply-preview {
+  width: 100%;
+  padding: 6px 8px;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  border: 0;
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  cursor: pointer;
+}
+
+.reply-preview strong {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reaction-summary {
+  position: absolute;
+  right: -8px;
+  bottom: -12px;
+  z-index: 2;
+  min-height: 24px;
+  padding: 2px 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+}
+
+.reaction-summary:hover {
+  transform: translateY(-1px);
+}
+
+.message.own .reaction-summary {
+  right: auto;
+  left: -8px;
+}
+
+.message-actions {
+  position: absolute;
+  top: 8px;
+  left: calc(100%);
+  z-index: 3;
+  padding: 4px;
+  width: max-content;
+  max-width: min(300px, 32vw);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: .16s var(--ease);
+}
+
+.message.own .message-actions {
+  right: calc(100%);
+  left: auto;
+}
+
+.message:hover .message-actions,
+.message:focus-within .message-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.message-actions button,
+.message-image-button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.message-actions button {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: var(--subtle);
+}
+
+.message-actions button:hover,
+.message-actions button.active {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-3));
+  color: var(--text);
+}
+
+.message-highlight .message {
+  outline: 2px solid var(--accent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .copy-message {
@@ -839,6 +976,19 @@ h2 {
 
 .user-row > span:not(.avatar) {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-details > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1148,6 +1298,11 @@ h2 {
   margin-top: 9px;
 }
 
+.message-image-button {
+  display: block;
+  padding: 0;
+}
+
 .message-image,
 .message-video {
   max-width: min(420px, 100%);
@@ -1178,6 +1333,67 @@ h2 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.reaction-viewer-modal {
+  width: min(420px, 92vw);
+}
+
+.reaction-viewer-list {
+  display: grid;
+  gap: 8px;
+}
+
+.reaction-viewer-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.reaction-viewer-row > span {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+
+.reaction-viewer-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reaction-viewer-row em {
+  color: var(--subtle);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 760;
+}
+
+.image-preview-modal {
+  max-width: min(92vw, 980px);
+  max-height: 88vh;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.image-preview-modal img {
+  max-width: 100%;
+  max-height: 78vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
 }
 
 .mention-token {
