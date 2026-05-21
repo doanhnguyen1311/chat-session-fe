@@ -110,7 +110,7 @@ export function configureAutoUpdater(): void {
 
   logFilePath = path.join(app.getPath("userData"), "auto-updater.log");
 
-  autoUpdater.autoDownload = true;
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
   autoUpdater.logger = {
@@ -133,7 +133,7 @@ export function configureAutoUpdater(): void {
     clearCheckTimeout();
     publish({
       stage: "available",
-      message: `Version ${info.version} is available. Downloading update...`,
+      message: `Version ${info.version} is available.`,
       availableVersion: toAvailableVersion(info)
     });
   });
@@ -185,6 +185,11 @@ export function configureAutoUpdater(): void {
     return status;
   });
 
+  ipcMain.handle("update:download", async () => {
+    await downloadUpdate();
+    return status;
+  });
+
   ipcMain.handle("update:restart-and-install", () => {
     if (status.stage !== "downloaded") {
       return false;
@@ -194,6 +199,36 @@ export function configureAutoUpdater(): void {
     autoUpdater.quitAndInstall(false, true);
     return true;
   });
+}
+
+export async function downloadUpdate(): Promise<void> {
+  if (!app.isPackaged) {
+    publish({
+      stage: "disabled",
+      message: "Auto update is only enabled in the packaged production app."
+    });
+    return;
+  }
+
+  if (status.stage !== "available") {
+    return;
+  }
+
+  try {
+    publish({
+      stage: "downloading",
+      message: "Downloading update 0%...",
+      percent: 0,
+      availableVersion: status.availableVersion
+    });
+    await autoUpdater.downloadUpdate();
+  } catch (error) {
+    publish({
+      stage: "error",
+      message: "Could not download update.",
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
 }
 
 export async function checkForUpdates(): Promise<void> {

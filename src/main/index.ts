@@ -1,6 +1,6 @@
 import path from "node:path";
 import { app, BrowserWindow, ipcMain, Menu, Notification } from "electron";
-import { checkForUpdates, configureAutoUpdater } from "./updater";
+import { configureAutoUpdater } from "./updater";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -35,20 +35,25 @@ function createWindow(): void {
   });
 }
 
+function configureLaunchOnStartup(): void {
+  if (!app.isPackaged || process.platform !== "win32") return;
+
+  app.setLoginItemSettings({
+    openAtLogin: true,
+    openAsHidden: false,
+    path: process.execPath
+  });
+}
+
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   configureAutoUpdater();
+  configureLaunchOnStartup();
   createWindow();
-  setTimeout(() => {
-    void checkForUpdates();
-  }, 1500);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
-      setTimeout(() => {
-        void checkForUpdates();
-      }, 1500);
     }
   });
 });
