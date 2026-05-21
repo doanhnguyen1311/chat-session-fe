@@ -1,5 +1,5 @@
 import path from "node:path";
-import { app, BrowserWindow, ipcMain, Menu, Notification } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification } from "electron";
 import { configureAutoUpdater } from "./updater";
 
 let mainWindow: BrowserWindow | null = null;
@@ -66,6 +66,21 @@ app.on("window-all-closed", () => {
 
 ipcMain.handle("app:is-window-active", () => {
   return Boolean(mainWindow && mainWindow.isFocused() && !mainWindow.isMinimized());
+});
+
+ipcMain.handle("app:set-unread-badge", (_event, count: number) => {
+  const unread = Math.max(0, Math.floor(Number(count) || 0));
+  if (process.platform === "win32") {
+    if (unread > 0) {
+      const label = unread > 99 ? "99+" : String(unread);
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect x="10" y="10" width="236" height="236" rx="118" fill="#ef2029"/><text x="128" y="154" text-anchor="middle" font-family="Arial, sans-serif" font-size="96" font-weight="800" fill="#ffffff">${label}</text></svg>`;
+      mainWindow?.setOverlayIcon(nativeImage.createFromDataURL(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`), `${unread} unread messages`);
+    } else {
+      mainWindow?.setOverlayIcon(null, "");
+    }
+  }
+  app.setBadgeCount(unread);
+  return true;
 });
 
 ipcMain.handle("notification:show", (_event, payload: { title: string; body: string }) => {

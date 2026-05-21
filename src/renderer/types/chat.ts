@@ -11,6 +11,7 @@ export type JoinResponse = {
   session: {
     id: string;
     name: string;
+    kind?: "GROUP" | "DIRECT";
   };
 };
 
@@ -44,6 +45,16 @@ export type Attachment = {
   type: "image" | "video" | "file";
 };
 
+export type MessageRead = {
+  userId: string;
+  readAt: string;
+  user?: {
+    displayName: string;
+  };
+};
+
+export type MessageReaction = "like" | "love" | "care" | "sad" | "angry" | "cry" | "sick";
+
 export type Message = {
   id: string;
   sessionId: string;
@@ -51,6 +62,13 @@ export type Message = {
   senderName: string;
   content: string;
   attachments?: Attachment[];
+  replyToId?: string | null;
+  replyTo?: Pick<Message, "id" | "senderName" | "content" | "attachments" | "revoked"> | null;
+  reactions?: Record<string, MessageReaction> | null;
+  pinned?: boolean;
+  revoked?: boolean;
+  forwardedFromId?: string | null;
+  reads?: MessageRead[];
   createdAt: string;
 };
 
@@ -58,12 +76,15 @@ export type OnlineUser = {
   id: string;
   displayName: string;
   avatarUrl?: string | null;
-  socketId: string;
-  joinedAt: string;
+  socketId?: string | null;
+  joinedAt?: string;
   isAdmin?: boolean;
+  isOnline?: boolean;
+  lastSeenAt?: string;
 };
 
 export type TypingUser = {
+  sessionId: string;
   userId: string;
   displayName: string;
   isTyping: boolean;
