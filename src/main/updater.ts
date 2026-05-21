@@ -37,6 +37,27 @@ let status: UpdateStatus = {
 let checking = false;
 let configured = false;
 let logFilePath = "";
+let checkTimeout: NodeJS.Timeout | null = null;
+
+function clearCheckTimeout(): void {
+  if (!checkTimeout) return;
+  clearTimeout(checkTimeout);
+  checkTimeout = null;
+}
+
+function startCheckTimeout(): void {
+  clearCheckTimeout();
+  checkTimeout = setTimeout(() => {
+    if (!checking || status.stage !== "checking") return;
+
+    checking = false;
+    publish({
+      stage: "error",
+      message: "Update check timed out. Please try again.",
+      error: "Timed out while checking GitHub Releases for updates."
+    });
+  }, 45_000);
+}
 
 function writeLog(level: "info" | "warn" | "error" | "debug", message: string, metadata?: unknown): void {
   const line = `[${new Date().toISOString()}] [${level.toUpperCase()}] ${message}${
@@ -101,6 +122,7 @@ export function configureAutoUpdater(): void {
 
   autoUpdater.on("checking-for-update", () => {
     checking = true;
+    startCheckTimeout();
     publish({
       stage: "checking",
       message: "Checking for updates..."
@@ -108,6 +130,7 @@ export function configureAutoUpdater(): void {
   });
 
   autoUpdater.on("update-available", (info) => {
+    clearCheckTimeout();
     publish({
       stage: "available",
       message: `Version ${info.version} is available. Downloading update...`,
@@ -117,6 +140,7 @@ export function configureAutoUpdater(): void {
 
   autoUpdater.on("update-not-available", () => {
     checking = false;
+    clearCheckTimeout();
     publish({
       stage: "not-available",
       message: "You are running the latest version."
@@ -146,6 +170,7 @@ export function configureAutoUpdater(): void {
 
   autoUpdater.on("error", (error) => {
     checking = false;
+    clearCheckTimeout();
     publish({
       stage: "error",
       message: "Update failed. Please try again later.",
