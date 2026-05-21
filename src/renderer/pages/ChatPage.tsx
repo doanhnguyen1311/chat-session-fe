@@ -480,7 +480,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
 
         <div className="message-list" ref={listRef}>
           {visibleMessages.length === 0 ? (
-            <div className="floating-panel" style={{ position: "static", width: "min(420px, 100%)", margin: "auto" }}>
+            <div className="floating-panel empty-state-panel" style={{ position: "static", width: "min(420px, 100%)", margin: "auto" }}>
               <h2>{searchQuery ? "No messages found" : "No messages yet"}</h2>
               <p>{searchQuery ? "Try another search term." : "Start the conversation with a short message."}</p>
               <div className="skeleton" style={{ height: 12, borderRadius: 999 }} />
