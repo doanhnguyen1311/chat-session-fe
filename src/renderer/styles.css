@@ -816,7 +816,7 @@ h2 {
   flex-wrap: wrap;
   gap: 3px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 12px;
   background: var(--surface);
   box-shadow: var(--shadow);
   opacity: 0;

@@ -22,10 +22,30 @@ const reactions = [
   ["like", "👍"],
   ["love", "❤️"],
   ["care", "🤗"],
+  ["haha", "😂"],
+  ["wow", "😮"],
+  ["cool", "😎"],
+  ["fire", "🔥"],
+  ["clap", "👏"],
+  ["thinking", "🤔"],
+  ["sleepy", "😴"],
   ["sad", "😢"],
   ["angry", "😡"],
   ["cry", "😭"],
-  ["sick", "🤢"]
+  ["sick", "🤢"],
+  ["mindblown", "🤯"],
+  ["skull", "💀"],
+  ["clown", "🤡"],
+  ["salute", "🫡"],
+  ["party", "🥳"],
+  ["broken", "💔"],
+  ["kiss", "😘"],
+  ["cat", "🐱"],
+  ["dog", "🐶"],
+  ["banana", "🍌"],
+  ["troll", "🗿"],
+  ["sus", "📮"],
+  ["laughing", "😆"]
 ] as const;
 
 export function MessageBubble({ message, own, currentUserId, repliedMessage, onCopy, onReply, onReact, onPin, onRevoke, onForward, onImageOpen, onJumpToMessage, onReactionSummaryOpen }: Props): JSX.Element {

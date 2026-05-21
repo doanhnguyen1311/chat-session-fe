@@ -35,10 +35,55 @@ const REACTION_LABELS = {
   like: { icon: "👍", label: "Thích" },
   love: { icon: "❤️", label: "Yêu thích" },
   care: { icon: "🤗", label: "Thương thương" },
+  haha: { icon: "😂", label: "Haha" },
+  laughing: { icon: "😆", label: "Cười lớn" },
+  rofl: { icon: "🤣", label: "Cười lăn" },
+  wow: { icon: "😮", label: "Wow" },
+  shocked: { icon: "😱", label: "Hoảng hốt" },
+  cool: { icon: "😎", label: "Ngầu" },
+  fire: { icon: "🔥", label: "Cháy quá" },
+  clap: { icon: "👏", label: "Vỗ tay" },
+  thinking: { icon: "🤔", label: "Suy nghĩ" },
+  nerd: { icon: "🤓", label: "Thông thái" },
+  sleepy: { icon: "😴", label: "Buồn ngủ" },
+  bored: { icon: "🥱", label: "Chán quá" },
   sad: { icon: "😢", label: "Buồn" },
   angry: { icon: "😡", label: "Tức giận" },
+  rage: { icon: "🤬", label: "Cay cú" },
   cry: { icon: "😭", label: "Khóc" },
-  sick: { icon: "🤢", label: "Buồn nôn" }
+  sick: { icon: "🤢", label: "Buồn nôn" },
+  dead: { icon: "☠️", label: "Chết luôn" },
+  skull: { icon: "💀", label: "Cười chết" },
+  mindblown: { icon: "🤯", label: "Sốc" },
+  clown: { icon: "🤡", label: "Hề hước" },
+  salute: { icon: "🫡", label: "Kính nể" },
+  party: { icon: "🥳", label: "Ăn mừng" },
+  broken: { icon: "💔", label: "Tan vỡ" },
+  kiss: { icon: "😘", label: "Hun cái" },
+  hug: { icon: "🫂", label: "Ôm cái" },
+  heartEyes: { icon: "😍", label: "Mê quá" },
+  devil: { icon: "😈", label: "Nham hiểm" },
+  angel: { icon: "😇", label: "Thiên thần" },
+  money: { icon: "🤑", label: "Giàu quá" },
+  poop: { icon: "💩", label: "Cứt luôn" },
+  robot: { icon: "🤖", label: "Robot" },
+  alien: { icon: "👽", label: "Người ngoài hành tinh" },
+  cat: { icon: "🐱", label: "Meow" },
+  dog: { icon: "🐶", label: "Gâu gâu" },
+  monkey: { icon: "🐵", label: "Khỉ" },
+  panda: { icon: "🐼", label: "Gấu trúc" },
+  banana: { icon: "🍌", label: "Chuối" },
+  pizza: { icon: "🍕", label: "Pizza" },
+  coffee: { icon: "☕", label: "Cafe" },
+  beer: { icon: "🍺", label: "Làm ly" },
+  troll: { icon: "🗿", label: "Đá mặt" },
+  sus: { icon: "📮", label: "Khả nghi" },
+  goat: { icon: "🐐", label: "GOAT" },
+  crown: { icon: "👑", label: "Vua luôn" },
+  lightning: { icon: "⚡", label: "Nhanh như điện" },
+  target: { icon: "🎯", label: "Chuẩn bài" },
+  bomb: { icon: "💣", label: "Nổ tung" },
+  wave: { icon: "👋", label: "Hello" }
 } as const;
 
 type Props = {
@@ -267,13 +312,13 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         rooms: current.rooms.map((room) =>
           room.session.id === payload.sessionId
             ? {
-                ...room,
-                user: {
-                  ...room.user,
-                  isAdmin: room.user.id === payload.newAdminId,
-                  role: room.user.id === payload.newAdminId ? "ADMIN" : "MEMBER"
-                }
+              ...room,
+              user: {
+                ...room.user,
+                isAdmin: room.user.id === payload.newAdminId,
+                role: room.user.id === payload.newAdminId ? "ADMIN" : "MEMBER"
               }
+            }
             : room
         )
       }));
@@ -606,9 +651,9 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         displayName: result.account.displayName,
         rooms: result.rooms.length
           ? result.rooms.map((room) => {
-              const previous = current.rooms.find((item) => item.session.id === room.session.id);
-              return { ...room, accessKey: previous?.accessKey ?? room.session.id, unread: previous?.unread ?? 0 };
-            })
+            const previous = current.rooms.find((item) => item.session.id === room.session.id);
+            return { ...room, accessKey: previous?.accessKey ?? room.session.id, unread: previous?.unread ?? 0 };
+          })
           : current.rooms,
         activeRoomId: current.activeRoomId
       }));
@@ -868,9 +913,16 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         {emojiOpen ? (
           <motion.div className="floating-panel" style={{ top: "auto", bottom: 88, right: 318, width: 260 }} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}>
             <h2>Emoji</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
-              {["👍", "🔥", "✨", "✅", "👀", "🚀", "❤️", "😂", "🙏", "💡", "🎯", "⚡"].map((emoji) => (
-                <button className="ghost-button" type="button" key={emoji} onClick={() => addEmoji(emoji)}>{emoji}</button>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+              {Object.values(REACTION_LABELS).map((reaction) => (
+                <button
+                  className="ghost-button"
+                  type="button"
+                  key={reaction.icon}
+                  onClick={() => addEmoji(reaction.icon)}
+                >
+                  {reaction.icon}
+                </button>
               ))}
             </div>
           </motion.div>
