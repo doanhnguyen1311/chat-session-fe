@@ -1,6 +1,6 @@
 {
   "name": "chat-session-fe",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Desktop multi-room session chat app",
   "author": "Session Chat",
   "private": true,
