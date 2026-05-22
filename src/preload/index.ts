@@ -17,6 +17,7 @@ const electronAPI = {
   isWindowActive: (): Promise<boolean> => ipcRenderer.invoke("app:is-window-active"),
   showNotification: (payload: { title: string; body: string }): Promise<boolean> =>
     ipcRenderer.invoke("notification:show", payload),
+  openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke("app:open-external", url),
   setUnreadBadge: (count: number): Promise<boolean> => ipcRenderer.invoke("app:set-unread-badge", count),
   updater: {
     getStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("update:get-status"),

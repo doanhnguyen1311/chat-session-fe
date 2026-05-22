@@ -1,6 +1,7 @@
-import { LogOut, MessageSquarePlus, Plus, UserRound } from "lucide-react";
+import { LogOut, MessageSquarePlus, Plus, Search, UserRound } from "lucide-react";
 import { motion } from "framer-motion";
 import type { RoomAuth } from "../App";
+import type { AccountSearchResult } from "../types/chat";
 
 type Props = {
   rooms: RoomAuth[];
@@ -10,9 +11,15 @@ type Props = {
   onJoin: () => void;
   onCreateDirect: () => void;
   onLogout: () => void;
+  userSearchQuery: string;
+  userSearchResults: AccountSearchResult[];
+  userSearchLoading: boolean;
+  directChatBusyAccountId: string | null;
+  onUserSearchChange: (query: string) => void;
+  onStartDirectChat: (user: AccountSearchResult) => void;
 };
 
-export function RoomsSidebar({ rooms, activeRoomId, onSelect, onCreate, onJoin, onCreateDirect, onLogout }: Props): JSX.Element {
+export function RoomsSidebar({ rooms, activeRoomId, onSelect, onCreate, onJoin, onCreateDirect, onLogout, userSearchQuery, userSearchResults, userSearchLoading, directChatBusyAccountId, onUserSearchChange, onStartDirectChat }: Props): JSX.Element {
   const directRooms = rooms.filter((room) => room.session.kind === "DIRECT");
   const groupRooms = rooms.filter((room) => room.session.kind !== "DIRECT");
   return (
@@ -35,6 +42,31 @@ export function RoomsSidebar({ rooms, activeRoomId, onSelect, onCreate, onJoin, 
           <MessageSquarePlus size={16} />
           Join group
         </button>
+      </div>
+
+      <div className="user-search-panel">
+        <div className="search-box">
+          <Search size={16} />
+          <input value={userSearchQuery} onChange={(event) => onUserSearchChange(event.target.value)} placeholder="Tìm người để nhắn riêng" />
+        </div>
+        {userSearchQuery.trim().length >= 2 ? (
+          <div className="user-search-results">
+            {userSearchLoading ? <div className="user-search-state">Đang tìm...</div> : null}
+            {!userSearchLoading && userSearchResults.length === 0 ? <div className="user-search-state">Không tìm thấy người dùng</div> : null}
+            {!userSearchLoading ? userSearchResults.map((user) => (
+              <button className="user-search-item" type="button" key={user.id} onClick={() => onStartDirectChat(user)} disabled={directChatBusyAccountId === user.id}>
+                <span className="avatar">
+                  {user.avatarUrl ? <img src={`${import.meta.env.VITE_BACKEND_URL ?? "https://apiprivate.delisocial.id.vn"}${user.avatarUrl}`} alt="" /> : user.displayName.slice(0, 1).toUpperCase()}
+                </span>
+                <span>
+                  <strong>{user.displayName}</strong>
+                  <em>@{user.username}</em>
+                </span>
+                <small>{directChatBusyAccountId === user.id ? "..." : "Nhắn"}</small>
+              </button>
+            )) : null}
+          </div>
+        ) : null}
       </div>
 
       <RoomSection title="Chat riêng" rooms={directRooms} activeRoomId={activeRoomId} onSelect={onSelect} />

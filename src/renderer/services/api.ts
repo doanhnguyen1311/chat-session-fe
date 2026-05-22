@@ -1,4 +1,4 @@
-import type { AccountAuthResponse, Attachment, CreateAccessKeyResponse, JoinResponse, Message, OnlineUser } from "../types/chat";
+import type { AccountAuthResponse, AccountSearchResult, Attachment, CreateAccessKeyResponse, JoinResponse, Message, OnlineUser } from "../types/chat";
 
 const API_URL = import.meta.env.VITE_BACKEND_URL ?? "https://apiprivate.delisocial.id.vn";
 
@@ -54,6 +54,20 @@ export const api = {
         Authorization: `Bearer ${accountToken}`
       },
       body: JSON.stringify(payload)
+    }),
+  searchAccounts: (accountToken: string, query: string) =>
+    request<{ users: AccountSearchResult[] }>(`/accounts/search?q=${encodeURIComponent(query)}`, {
+      headers: {
+        Authorization: `Bearer ${accountToken}`
+      }
+    }),
+  startDirectChat: (accountToken: string, targetAccountId: string) =>
+    request<JoinResponse>("/direct-chats", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accountToken}`
+      },
+      body: JSON.stringify({ targetAccountId })
     }),
   uploadFiles: (files: File[]) => {
     const form = new FormData();

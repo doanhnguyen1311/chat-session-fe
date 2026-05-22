@@ -1,5 +1,5 @@
 import path from "node:path";
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, shell } from "electron";
 import { configureAutoUpdater } from "./updater";
 
 let mainWindow: BrowserWindow | null = null;
@@ -29,6 +29,21 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   }
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      void shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const currentUrl = mainWindow?.webContents.getURL();
+    if (url !== currentUrl && (url.startsWith("http://") || url.startsWith("https://"))) {
+      event.preventDefault();
+      void shell.openExternal(url);
+    }
+  });
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -66,6 +81,14 @@ app.on("window-all-closed", () => {
 
 ipcMain.handle("app:is-window-active", () => {
   return Boolean(mainWindow && mainWindow.isFocused() && !mainWindow.isMinimized());
+});
+
+ipcMain.handle("app:open-external", async (_event, url: string) => {
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    return false;
+  }
+  await shell.openExternal(url);
+  return true;
 });
 
 ipcMain.handle("app:set-unread-badge", (_event, count: number) => {

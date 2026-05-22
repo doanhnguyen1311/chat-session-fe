@@ -1,4 +1,4 @@
-import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -23,7 +23,7 @@ import type { AppState, RoomAuth } from "../App";
 import { api } from "../services/api";
 import { connectSocket, socket } from "../services/socket";
 import { playNotificationSound } from "../services/notifications";
-import type { Attachment, JoinResponse, Message, OnlineUser, TypingUser } from "../types/chat";
+import type { AccountSearchResult, Attachment, JoinResponse, Message, OnlineUser, TypingUser } from "../types/chat";
 import { MessageBubble } from "../components/MessageBubble";
 import { OnlineUsers } from "../components/OnlineUsers";
 import { RoomsSidebar } from "../components/RoomsSidebar";
@@ -110,6 +110,10 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
   const [theme, setTheme] = useState<"dark" | "light">(() => (localStorage.getItem("chat-theme") as "dark" | "light") ?? "dark");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [userSearchResults, setUserSearchResults] = useState<AccountSearchResult[]>([]);
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
+  const [directChatBusyAccountId, setDirectChatBusyAccountId] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -129,6 +133,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
   const toastTimers = useRef<number[]>([]);
   const loadingMoreRef = useRef<Record<string, boolean>>({});
   const shouldStickToBottomRef = useRef(true);
+  const initialScrolledRoomsRef = useRef<Set<string>>(new Set());
   const loadedRoomsRef = useRef<Set<string>>(new Set());
   const roomsRef = useRef(state.rooms);
   const activeRoomIdRef = useRef(activeRoom.session.id);
@@ -174,6 +179,25 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
   }, [state.rooms.map((room) => `${room.session.id}:${room.token}`).join("|")]);
 
   useEffect(() => {
+    const query = userSearchQuery.trim();
+    if (!state.account?.accountToken || query.length < 2) {
+      setUserSearchResults([]);
+      setUserSearchLoading(false);
+      return;
+    }
+
+    setUserSearchLoading(true);
+    const timer = window.setTimeout(() => {
+      void api.searchAccounts(state.account?.accountToken ?? "", query)
+        .then((result) => setUserSearchResults(result.users))
+        .catch(() => setUserSearchResults([]))
+        .finally(() => setUserSearchLoading(false));
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+  }, [state.account?.accountToken, userSearchQuery]);
+
+  useEffect(() => {
     const syncOnlineUsers = (): void => {
       for (const room of state.rooms) {
         void api.onlineUsers(room.token).then((result) => {
@@ -209,12 +233,16 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
       const room = roomsRef.current.find((item) => item.session.id === message.sessionId);
       const active = await (window.electronAPI?.isWindowActive?.() ?? Promise.resolve(!document.hidden));
       if (message.senderId !== room?.user.id && (message.sessionId !== activeRoomIdRef.current || !active || document.hidden)) {
-        onStateChange((current) => ({
-          ...current,
-          rooms: current.rooms.map((item) =>
-            item.session.id === message.sessionId ? { ...item, unread: item.unread + 1 } : item
-          )
-        }));
+        onStateChange((current) => {
+          const targetRoom = current.rooms.find((item) => item.session.id === message.sessionId);
+          if (!targetRoom) return current;
+          const updatedRoom = { ...targetRoom, unread: targetRoom.unread + 1 };
+          return {
+            ...current,
+            rooms: [updatedRoom, ...current.rooms.filter((item) => item.session.id !== message.sessionId)],
+            recentRoomIds: [message.sessionId, ...current.recentRoomIds.filter((id) => id !== message.sessionId)].slice(0, 12)
+          };
+        });
       }
 
       if (message.senderId !== room?.user.id) {
@@ -419,10 +447,30 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     }
   }, [activeRoom.session.id, activeRoom.token, hasMoreMessagesByRoom, messages, searchQuery, toast]);
 
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto"): void => {
+    if (!visibleMessages.length) return;
+    messageVirtualizer.scrollToIndex(visibleMessages.length - 1, { align: "end" });
+    window.requestAnimationFrame(() => {
+      listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior });
+      window.requestAnimationFrame(() => {
+        listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior });
+      });
+    });
+  }, [messageVirtualizer, visibleMessages.length]);
+
+  useLayoutEffect(() => {
+    if (!visibleMessages.length || searchQuery.trim()) return;
+    const roomId = activeRoom.session.id;
+    if (initialScrolledRoomsRef.current.has(roomId)) return;
+    initialScrolledRoomsRef.current.add(roomId);
+    shouldStickToBottomRef.current = true;
+    scrollToBottom("auto");
+  }, [activeRoom.session.id, scrollToBottom, searchQuery, visibleMessages.length]);
+
   useEffect(() => {
-    if (!shouldStickToBottomRef.current) return;
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
-  }, [activeRoom.session.id, messagesByRoom[activeRoom.session.id]?.length, visibleMessages.length]);
+    if (!shouldStickToBottomRef.current || !initialScrolledRoomsRef.current.has(activeRoom.session.id)) return;
+    scrollToBottom("smooth");
+  }, [activeRoom.session.id, messagesByRoom[activeRoom.session.id]?.length, scrollToBottom, visibleMessages.length]);
 
   useEffect(() => {
     const totalUnread = state.rooms.reduce((total, room) => total + room.unread, 0);
@@ -462,6 +510,11 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     names.set(activeRoom.user.id, activeRoom.user.displayName);
     return names;
   }, [activeRoom.user.displayName, activeRoom.user.id, onlineUsers]);
+  const avatarUrlByUserId = useMemo(() => {
+    const avatars = new Map<string, string | null | undefined>(onlineUsers.map((user) => [user.id, user.avatarUrl]));
+    avatars.set(activeRoom.user.id, state.account?.account.avatarUrl);
+    return avatars;
+  }, [activeRoom.user.id, onlineUsers, state.account?.account.avatarUrl]);
   const mentionQuery = draft.match(/(^|\s)@([\p{L}\p{N}_.-]*)$/u)?.[2]?.toLowerCase() ?? "";
   const mentionUsers = onlineUsers
     .filter((user) => user.id !== activeRoom.user.id)
@@ -489,6 +542,23 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
       rooms: current.rooms.map((room) => (room.session.id === roomId ? { ...room, unread: 0 } : room)),
       recentRoomIds: [roomId, ...current.recentRoomIds.filter((id) => id !== roomId)].slice(0, 12)
     }));
+  }
+
+  async function startDirectChat(user: AccountSearchResult): Promise<void> {
+    if (!state.account?.accountToken || directChatBusyAccountId) return;
+    setDirectChatBusyAccountId(user.id);
+    try {
+      const joined = await api.startDirectChat(state.account.accountToken, user.id);
+      connectSocket(state.account.accountToken).emit("auth:resume", { token: joined.token });
+      onJoined({ ...joined, accessKey: joined.session.id });
+      setUserSearchQuery("");
+      setUserSearchResults([]);
+      toast(`Đã mở chat riêng với ${user.displayName}`);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Could not start direct chat", "error");
+    } finally {
+      setDirectChatBusyAccountId(null);
+    }
   }
 
   async function createRoom(titleInput: string, kind: "GROUP" | "DIRECT" = "GROUP"): Promise<void> {
@@ -599,6 +669,10 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     toast(message);
   }
 
+  function openExternalLink(url: string): void {
+    void window.electronAPI?.openExternal?.(url);
+  }
+
   function addEmoji(emoji: string): void {
     setDraft((current) => `${current}${emoji}`);
     setEmojiOpen(false);
@@ -678,6 +752,12 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         onJoin={() => setGroupModal("join")}
         onCreateDirect={() => setGroupModal("direct")}
         onLogout={onLogout}
+        userSearchQuery={userSearchQuery}
+        userSearchResults={userSearchResults}
+        userSearchLoading={userSearchLoading}
+        directChatBusyAccountId={directChatBusyAccountId}
+        onUserSearchChange={setUserSearchQuery}
+        onStartDirectChat={(user) => void startDirectChat(user)}
       />
 
       <section className="chat-area">
@@ -748,6 +828,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
                     message={message}
                     own={message.senderId === activeRoom.user.id}
                     currentUserId={activeRoom.user.id}
+                    senderAvatarUrl={avatarUrlByUserId.get(message.senderId)}
                     repliedMessage={message.replyToId ? messageById.get(message.replyToId) ?? message.replyTo ?? undefined : undefined}
                     onCopy={copyText}
                     onReply={setReplyingTo}
@@ -756,6 +837,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
                     onRevoke={revokeOwnMessage}
                     onForward={forwardMessage}
                     onImageOpen={setImagePreview}
+                    onOpenExternal={openExternalLink}
                     onJumpToMessage={jumpToMessage}
                     onReactionSummaryOpen={setReactionViewer}
                   />

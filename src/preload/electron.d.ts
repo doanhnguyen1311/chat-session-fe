@@ -16,6 +16,7 @@ declare global {
     electronAPI: {
       isWindowActive: () => Promise<boolean>;
       showNotification: (payload: { title: string; body: string }) => Promise<boolean>;
+      openExternal: (url: string) => Promise<boolean>;
       setUnreadBadge: (count: number) => Promise<boolean>;
       updater: {
         getStatus: () => Promise<UpdateStatus>;

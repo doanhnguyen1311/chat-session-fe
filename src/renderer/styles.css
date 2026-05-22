@@ -410,7 +410,7 @@ h2 {
 .rooms-sidebar {
   height: 100%;
   display: grid;
-  grid-template-rows: auto auto minmax(0, .8fr) minmax(0, 1.2fr) auto;
+  grid-template-rows: auto auto auto minmax(0, .8fr) minmax(0, 1.2fr) auto;
   gap: 14px;
   padding: 14px;
   border-radius: var(--radius-xl);
@@ -491,6 +491,75 @@ h2 {
   outline: 0;
   background: transparent;
   color: var(--text);
+}
+
+.user-search-panel {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.user-search-results {
+  max-height: 210px;
+  overflow-y: auto;
+  display: grid;
+  gap: 6px;
+}
+
+.user-search-state {
+  padding: 8px 10px;
+  color: var(--subtle);
+  font-size: 12px;
+  font-weight: 740;
+}
+
+.user-search-item {
+  min-width: 0;
+  width: 100%;
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.user-search-item:disabled {
+  cursor: wait;
+  opacity: .72;
+}
+
+.user-search-item .avatar {
+  width: 32px;
+  height: 32px;
+  font-size: 12px;
+}
+
+.user-search-item span:not(.avatar) {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.user-search-item strong,
+.user-search-item em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-search-item em,
+.user-search-item small {
+  color: var(--subtle);
+  font-size: 11px;
+  font-weight: 760;
 }
 
 .room-section {
@@ -702,9 +771,27 @@ h2 {
   z-index: 10;
 }
 
+.message-with-avatar {
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+}
+
+.message-with-avatar.own {
+  flex-direction: row-reverse;
+}
+
+.message-avatar {
+  flex: 0 0 auto;
+  max-width: 24px;
+  max-height: 24px;
+  font-size: 13px;
+}
+
 .message {
   position: relative;
-  max-width: min(680px, 76%);
+  max-width: min(680px, calc(76% - 43px));
   align-self: flex-start;
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -1639,7 +1726,7 @@ h2 {
   }
 
   .message {
-    max-width: 88%;
+    max-width: calc(88% - 43px);
   }
 
   .floating-panel:not(.empty-state-panel),
@@ -1750,7 +1837,7 @@ h2 {
   }
 
   .message {
-    max-width: 94%;
+    max-width: calc(94% - 43px);
     padding: 10px 11px;
   }
 

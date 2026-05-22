@@ -36,6 +36,13 @@ export type AccountAuthResponse = {
   rooms: JoinResponse[];
 };
 
+export type AccountSearchResult = {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+};
+
 export type Attachment = {
   url: string;
   name: string;

@@ -1,11 +1,13 @@
 import { Copy, Download, FileText, Forward, Pin, Reply, RotateCcw } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Attachment, Message } from "../types/chat";
+import { useEffect } from "react";
 
 type Props = {
   message: Message;
   own: boolean;
   currentUserId: string;
+  senderAvatarUrl?: string | null;
   repliedMessage?: Pick<Message, "id" | "senderName" | "content" | "attachments" | "revoked">;
   onCopy: (content: string) => void;
   onReply: (message: Message) => void;
@@ -14,6 +16,7 @@ type Props = {
   onRevoke: (message: Message) => void;
   onForward: (message: Message) => void;
   onImageOpen: (src: string) => void;
+  onOpenExternal: (url: string) => void;
   onJumpToMessage: (messageId: string) => void;
   onReactionSummaryOpen: (message: Message) => void;
 };
@@ -48,7 +51,7 @@ const reactions = [
   ["laughing", "😆"]
 ] as const;
 
-export function MessageBubble({ message, own, currentUserId, repliedMessage, onCopy, onReply, onReact, onPin, onRevoke, onForward, onImageOpen, onJumpToMessage, onReactionSummaryOpen }: Props): JSX.Element {
+export function MessageBubble({ message, own, currentUserId, senderAvatarUrl, repliedMessage, onCopy, onReply, onReact, onPin, onRevoke, onForward, onImageOpen, onOpenExternal, onJumpToMessage, onReactionSummaryOpen }: Props): JSX.Element {
   const time = new Intl.DateTimeFormat(undefined, {
     hour: "2-digit",
     minute: "2-digit"
@@ -57,58 +60,93 @@ export function MessageBubble({ message, own, currentUserId, repliedMessage, onC
   const copyValue = [message.content, ...(message.attachments ?? []).map((item) => item.originalName)].filter(Boolean).join("\n");
   const myReaction = message.reactions?.[currentUserId];
   const reactionItems = Object.values(message.reactions ?? {});
-
+  const avatarSrc = senderAvatarUrl
+    ? senderAvatarUrl.startsWith("http")
+      ? senderAvatarUrl
+      : `${import.meta.env.VITE_BACKEND_URL ?? "https://apiprivate.delisocial.id.vn"}${senderAvatarUrl}`
+    : null;
+    
   return (
-    <motion.article
-      className={own ? "message own" : "message"}
-      initial={{ opacity: 0, y: 8, scale: 0.985 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
-    >
-      <div className="message-meta">
-        <span>{message.senderName}</span>
-        <time>{time}</time>
-        {message.pinned ? <Pin size={13} /> : null}
-        {message.forwardedFromId ? <span>Forwarded</span> : null}
-        <button className="copy-message" type="button" onClick={() => onCopy(copyValue)} title="Copy message">
-          <Copy size={13} />
-        </button>
-      </div>
-      {message.replyToId ? (
-        <button className="reply-preview" type="button" onClick={() => onJumpToMessage(message.replyToId ?? "")}>
-          <span>{repliedMessage ? repliedMessage.senderName : "Original message"}</span>
-          <strong>{repliedMessage?.revoked ? "Message recalled" : repliedMessage?.content || repliedMessage?.attachments?.[0]?.originalName || "Message not loaded yet"}</strong>
-        </button>
-      ) : null}
-      {message.revoked ? <p className="revoked-message">Message recalled</p> : message.content ? <p>{renderMentions(message.content)}</p> : null}
-      {!message.revoked && message.attachments?.length ? <AttachmentGrid attachments={message.attachments} onImageOpen={onImageOpen} /> : null}
-      {reactionItems.length ? (
-        <button className="reaction-summary" type="button" onClick={() => onReactionSummaryOpen(message)} title="View reactions">
-          {reactionItems.map((reaction, index) => <span key={`${reaction}-${index}`}>{reactions.find(([key]) => key === reaction)?.[1]}</span>)}
-        </button>
-      ) : null}
-      <div className="message-actions">
-        <button type="button" onClick={() => onReply(message)} title="Reply"><Reply size={13} /></button>
-        {reactions.map(([key, icon]) => <button className={myReaction === key ? "active" : ""} type="button" key={key} onClick={() => onReact(message.id, myReaction === key ? "" : key)} title={key}>{icon}</button>)}
-        <button type="button" onClick={() => onPin(message)} title="Pin"><Pin size={13} /></button>
-        <button type="button" onClick={() => onForward(message)} title="Forward"><Forward size={13} /></button>
-        {own && !message.revoked ? <button type="button" onClick={() => onRevoke(message)} title="Recall"><RotateCcw size={13} /></button> : null}
-      </div>
-      {own && message.reads?.length ? <span className="read-receipts">Seen by {message.reads.map((read) => read.user?.displayName).filter(Boolean).join(", ")}</span> : null}
-    </motion.article>
+    <div className={own ? "message-with-avatar own" : "message-with-avatar"}>
+      <span className="message-avatar avatar">
+        {avatarSrc ? <img src={avatarSrc} alt="" /> : message.senderName.slice(0, 1).toUpperCase()}
+      </span>
+      <motion.article
+        className={own ? "message own" : "message"}
+        initial={{ opacity: 0, y: 8, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+      >
+        <div className="message-meta">
+          <span>{message.senderName}</span>
+          <time>{time}</time>
+          {message.pinned ? <Pin size={13} /> : null}
+          {message.forwardedFromId ? <span>Forwarded</span> : null}
+          <button className="copy-message" type="button" onClick={() => onCopy(copyValue)} title="Copy message">
+            <Copy size={13} />
+          </button>
+        </div>
+        {message.replyToId ? (
+          <button className="reply-preview" type="button" onClick={() => onJumpToMessage(message.replyToId ?? "")}>
+            <span>{repliedMessage ? repliedMessage.senderName : "Original message"}</span>
+            <strong>{repliedMessage?.revoked ? "Message recalled" : repliedMessage?.content || repliedMessage?.attachments?.[0]?.originalName || "Message not loaded yet"}</strong>
+          </button>
+        ) : null}
+        {message.revoked ? <p className="revoked-message">Message recalled</p> : message.content ? <p>{renderMentions(message.content, onOpenExternal)}</p> : null}
+        {!message.revoked && message.attachments?.length ? <AttachmentGrid attachments={message.attachments} onImageOpen={onImageOpen} /> : null}
+        {reactionItems.length ? (
+          <button className="reaction-summary" type="button" onClick={() => onReactionSummaryOpen(message)} title="View reactions">
+            {reactionItems.map((reaction, index) => <span key={`${reaction}-${index}`}>{reactions.find(([key]) => key === reaction)?.[1]}</span>)}
+          </button>
+        ) : null}
+        <div className="message-actions">
+          <button type="button" onClick={() => onReply(message)} title="Reply"><Reply size={13} />
+          </button>
+          {reactions.map(([key, icon]) => <button className={myReaction === key ? "active" : ""} type="button" key={key} onClick={() => onReact(message.id, myReaction === key ? "" : key)} title={key}>{icon}</button>)}
+          <button type="button" onClick={() => onPin(message)} title="Pin"><Pin size={13} /></button>
+          <button type="button" onClick={() => onForward(message)} title="Forward"><Forward size={13} /></button>
+          {own && !message.revoked ? <button type="button" onClick={() => onRevoke(message)} title="Recall"><RotateCcw size={13} /></button> : null}
+        </div>
+        {own && message.reads?.length ? <span className="read-receipts">Seen by {message.reads.map((read) => read.user?.displayName).filter(Boolean).join(", ")}</span> : null}
+      </motion.article>
+    </div>
   );
 }
 
-function renderMentions(content: string): Array<string | JSX.Element> {
-  return content.split(/(@[\p{L}\p{N}_.-]+)/gu).map((part, index) =>
-    part.startsWith("@") ? (
-      <strong className="mention-token" key={`${part}-${index}`}>
-        {part}
-      </strong>
-    ) : (
-      part
-    )
-  );
+const URL_PATTERN = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/giu;
+const MENTION_PATTERN = /(@[\p{L}\p{N}_.-]+)/gu;
+
+function renderMentions(content: string, onOpenExternal: (url: string) => void): Array<string | JSX.Element> {
+  return content.split(URL_PATTERN).flatMap((part, index) => {
+    if (part.match(URL_PATTERN)) {
+      const href = part.startsWith("www.") ? `https://${part}` : part;
+      return (
+        <a
+          href={href}
+          key={`${part}-${index}`}
+          onClick={(event) => {
+            event.preventDefault();
+            onOpenExternal(href);
+          }}
+          rel="noreferrer"
+          style={{ color: "#2563eb", textDecoration: "underline" }}
+          target="_blank"
+        >
+          {part}
+        </a>
+      );
+    }
+
+    return part.split(MENTION_PATTERN).map((mentionPart, mentionIndex) =>
+      mentionPart.startsWith("@") ? (
+        <strong className="mention-token" key={`${mentionPart}-${index}-${mentionIndex}`}>
+          {mentionPart}
+        </strong>
+      ) : (
+        mentionPart
+      )
+    );
+  });
 }
 
 function AttachmentGrid({ attachments, onImageOpen }: { attachments: Attachment[]; onImageOpen: (src: string) => void }): JSX.Element {
