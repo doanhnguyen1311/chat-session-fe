@@ -60,7 +60,7 @@ export type MessageRead = {
   };
 };
 
-export type MessageReaction = "like" | "love" | "care" | "sad" | "angry" | "cry" | "sick";
+export type MessageReaction = "like" | "love" | "care" | "sad" | "angry" | "cry" | "sick" | "system";
 
 export type Message = {
   id: string;

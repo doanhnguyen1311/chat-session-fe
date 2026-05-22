@@ -1,4 +1,5 @@
 import type { AccountAuthResponse, AccountSearchResult, Attachment, CreateAccessKeyResponse, JoinResponse, Message, OnlineUser } from "../types/chat";
+import type { ServerRoomTheme } from "../theme";
 
 const API_URL = import.meta.env.VITE_BACKEND_URL ?? "https://apiprivate.delisocial.id.vn";
 
@@ -84,5 +85,12 @@ export const api = {
   },
   onlineUsers: (token: string) =>
     request<{ users: OnlineUser[] }>(`/online-users?token=${encodeURIComponent(token)}`),
+  roomTheme: (token: string) =>
+    request<{ theme: ServerRoomTheme }>(`/room-theme?token=${encodeURIComponent(token)}`),
+  updateRoomTheme: (payload: { token: string } & Omit<ServerRoomTheme, "roomId" | "updatedBy" | "updatedAt">) =>
+    request<{ theme: ServerRoomTheme }>("/room-theme", {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    }),
   health: () => request<{ ok: boolean }>("/health")
 };

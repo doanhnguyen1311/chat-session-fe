@@ -40,7 +40,7 @@ export function App(): JSX.Element {
   const [bootstrapped, setBootstrapped] = useState(false);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = localStorage.getItem("chat-theme") ?? "dark";
+    document.documentElement.dataset.theme = localStorage.getItem("chat-theme") ?? "glass-neo";
   }, []);
 
   useEffect(() => {

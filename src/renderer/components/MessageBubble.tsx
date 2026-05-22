@@ -1,7 +1,5 @@
 import { Copy, Download, FileText, Forward, Pin, Reply, RotateCcw } from "lucide-react";
-import { motion } from "framer-motion";
 import type { Attachment, Message } from "../types/chat";
-import { useEffect } from "react";
 
 type Props = {
   message: Message;
@@ -73,12 +71,7 @@ export function MessageBubble({ message, own, currentUserId, senderAvatarUrl, re
       <span className="message-avatar avatar">
         {avatarSrc ? <img src={avatarSrc} alt="" /> : message.senderName.slice(0, 1).toUpperCase()}
       </span>
-      <motion.article
-        className={own ? "message own" : "message"}
-        initial={{ opacity: 0, y: 8, scale: 0.985 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
-      >
+      <article className={own ? "message own" : "message"}>
         <div className="message-meta">
           <span>{message.senderName}</span>
           <time>{time}</time>
@@ -110,7 +103,7 @@ export function MessageBubble({ message, own, currentUserId, senderAvatarUrl, re
           {own && !message.revoked ? <button type="button" onClick={() => onRevoke(message)} title="Recall"><RotateCcw size={13} /></button> : null}
         </div>
         {own && message.reads?.length ? <span className="read-receipts">Seen by {message.reads.map((read) => read.user?.displayName).filter(Boolean).join(", ")}</span> : null}
-      </motion.article>
+      </article>
     </div>
   );
 }

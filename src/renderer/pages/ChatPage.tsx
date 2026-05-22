@@ -1,4 +1,5 @@
 import { Dispatch, FormEvent, SetStateAction, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -6,14 +7,12 @@ import {
   Copy,
   Image,
   Mic,
-  Moon,
   Paperclip,
   Phone,
   Search,
   Send,
   Settings,
   Smile,
-  Sun,
   UserCircle,
   Wifi,
   WifiOff,
@@ -29,6 +28,8 @@ import { OnlineUsers } from "../components/OnlineUsers";
 import { RoomsSidebar } from "../components/RoomsSidebar";
 import { Toast, ToastHost } from "../components/ToastHost";
 import { UpdateSettings } from "../components/UpdateSettings";
+import { CHAT_THEMES, DEFAULT_THEME_ID, DEFAULT_WALLPAPER, WALLPAPER_PRESETS } from "../theme";
+import type { ChatThemeId, RoomWallpaperConfig, ServerRoomTheme, WallpaperStore } from "../theme";
 
 const MESSAGE_PAGE_SIZE = 10;
 const REACTION_LABELS = {
@@ -83,7 +84,8 @@ const REACTION_LABELS = {
   lightning: { icon: "⚡", label: "Nhanh như điện" },
   target: { icon: "🎯", label: "Chuẩn bài" },
   bomb: { icon: "💣", label: "Nổ tung" },
-  wave: { icon: "👋", label: "Hello" }
+  wave: { icon: "👋", label: "Hello" },
+  system: { icon: "✨", label: "System" }
 } as const;
 
 type Props = {
@@ -107,7 +109,18 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
   const [groupTitle, setGroupTitle] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [groupBusy, setGroupBusy] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">(() => (localStorage.getItem("chat-theme") as "dark" | "light") ?? "dark");
+  const [theme, setTheme] = useState<ChatThemeId>(() => (localStorage.getItem("chat-theme") as ChatThemeId | null) ?? DEFAULT_THEME_ID);
+  const [pendingTheme, setPendingTheme] = useState<ChatThemeId>(() => (localStorage.getItem("chat-theme") as ChatThemeId | null) ?? DEFAULT_THEME_ID);
+  const [wallpapers, setWallpapers] = useState<WallpaperStore>(() => {
+    const saved = localStorage.getItem("chat-wallpapers");
+    return saved ? (JSON.parse(saved) as WallpaperStore) : {};
+  });
+  const [pendingWallpapers, setPendingWallpapers] = useState<WallpaperStore>(() => {
+    const saved = localStorage.getItem("chat-wallpapers");
+    return saved ? (JSON.parse(saved) as WallpaperStore) : {};
+  });
+  const [roomThemes, setRoomThemes] = useState<Record<string, ServerRoomTheme>>({});
+  const [customWallpaperUrl, setCustomWallpaperUrl] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [userSearchQuery, setUserSearchQuery] = useState("");
@@ -128,17 +141,17 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [reactionViewer, setReactionViewer] = useState<Message | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const latestMessageRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const typingTimer = useRef<number | null>(null);
   const toastTimers = useRef<number[]>([]);
   const loadingMoreRef = useRef<Record<string, boolean>>({});
   const shouldStickToBottomRef = useRef(true);
-  const pendingBottomScrollRoomRef = useRef<string | null>(activeRoom.session.id);
-  const suppressScrollTrackingRef = useRef(false);
+  const forceBottomRoomRef = useRef<string | null>(activeRoom.session.id);
   const loadedRoomsRef = useRef<Set<string>>(new Set());
   const roomsRef = useRef(state.rooms);
   const activeRoomIdRef = useRef(activeRoom.session.id);
+  const currentRoomTheme = roomThemes[activeRoom.session.id];
+  const effectiveTheme = currentRoomTheme?.themeType ?? theme;
 
   const toast = useCallback((message: string, tone: Toast["tone"] = "info") => {
     const id = crypto.randomUUID();
@@ -161,9 +174,13 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.theme = pendingTheme;
     localStorage.setItem("chat-theme", theme);
-  }, [theme]);
+  }, [pendingTheme, theme]);
+
+  useEffect(() => {
+    localStorage.setItem("chat-wallpapers", JSON.stringify(wallpapers));
+  }, [wallpapers]);
 
   useEffect(() => {
     setProfileName(state.account?.account.displayName ?? activeRoom.user.displayName);
@@ -177,6 +194,14 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         setMessagesByRoom((current) => ({ ...current, [room.session.id]: result.messages }));
         setHasMoreMessagesByRoom((current) => ({ ...current, [room.session.id]: result.messages.length === MESSAGE_PAGE_SIZE }));
       });
+    }
+  }, [state.rooms.map((room) => `${room.session.id}:${room.token}`).join("|")]);
+
+  useEffect(() => {
+    for (const room of state.rooms) {
+      void api.roomTheme(room.token).then((result) => {
+        setRoomThemes((current) => ({ ...current, [room.session.id]: result.theme }));
+      }).catch(() => undefined);
     }
   }, [state.rooms.map((room) => `${room.session.id}:${room.token}`).join("|")]);
 
@@ -360,6 +385,10 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
       }
     };
 
+    const onRoomThemeUpdated = (payload: { sessionId: string; theme: ServerRoomTheme }): void => {
+      setRoomThemes((current) => ({ ...current, [payload.sessionId]: payload.theme }));
+    };
+
     const onMessageError = (payload: { message?: string }): void => toast(payload.message ?? "Failed to send message", "error");
     const onAdminError = (payload: { message?: string }): void => toast(payload.message ?? "Admin action failed", "error");
     const onUserLeft = (payload: { sessionId: string; user: { id: string; displayName?: string } }): void => {
@@ -384,6 +413,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     client.on("user:kicked", onKicked);
     client.on("message:error", onMessageError);
     client.on("admin:error", onAdminError);
+    client.on("room-theme:updated", onRoomThemeUpdated);
 
     if (client.connected) {
       resumeAll();
@@ -405,6 +435,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
       client.off("user:kicked", onKicked);
       client.off("message:error", onMessageError);
       client.off("admin:error", onAdminError);
+      client.off("room-theme:updated", onRoomThemeUpdated);
     };
   }, [onStateChange, state.account?.accountToken, toast]);
 
@@ -413,12 +444,47 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     ? messages.filter((message) => message.content.toLowerCase().includes(searchQuery.trim().toLowerCase()))
     : messages;
   const messageById = useMemo(() => new Map(messages.map((message) => [message.id, message])), [messages]);
+  const activeTheme = CHAT_THEMES.find((item) => item.id === pendingTheme) ?? CHAT_THEMES[0];
+  const activeWallpaper: RoomWallpaperConfig = currentRoomTheme
+    ? {
+      image: currentRoomTheme.wallpaperUrl ?? undefined,
+      blur: currentRoomTheme.blur,
+      opacity: currentRoomTheme.opacity,
+      overlay: currentRoomTheme.overlay,
+      brightness: currentRoomTheme.brightness,
+      saturation: currentRoomTheme.saturation
+    }
+    : wallpapers[activeRoom.session.id] ?? DEFAULT_WALLPAPER;
+  const pendingWallpaper = pendingWallpapers[activeRoom.session.id] ?? activeWallpaper;
+  const hasThemeChanges = pendingTheme !== effectiveTheme;
+  const hasWallpaperChanges = JSON.stringify(pendingWallpaper) !== JSON.stringify(activeWallpaper);
+  const hasAppearanceChanges = hasThemeChanges || hasWallpaperChanges;
+  const wallpaperPreset = WALLPAPER_PRESETS.find((preset) => preset.id === pendingWallpaper.preset);
+  const wallpaperImage = pendingWallpaper.image && !pendingWallpaper.image.startsWith("http") && pendingWallpaper.image.startsWith("/")
+    ? `${import.meta.env.VITE_BACKEND_URL ?? "https://apiprivate.delisocial.id.vn"}${pendingWallpaper.image}`
+    : pendingWallpaper.image;
+  const chatBackgroundStyle = {
+    "--chat-wallpaper": wallpaperImage ? `url("${wallpaperImage}")` : wallpaperPreset?.image ?? WALLPAPER_PRESETS[0].image,
+    "--chat-wallpaper-blur": `${pendingWallpaper.blur}px`,
+    "--chat-wallpaper-opacity": String(pendingWallpaper.opacity),
+    "--chat-wallpaper-overlay": pendingWallpaper.overlay,
+    "--chat-wallpaper-brightness": String(pendingWallpaper.brightness),
+    "--chat-wallpaper-saturation": String(pendingWallpaper.saturation)
+  } as CSSProperties;
+
+  useEffect(() => {
+    setPendingTheme(effectiveTheme);
+    setPendingWallpapers((current) => ({
+      ...current,
+      [activeRoom.session.id]: activeWallpaper
+    }));
+  }, [activeRoom.session.id, currentRoomTheme?.updatedAt, effectiveTheme]);
 
   const messageVirtualizer = useVirtualizer({
     count: visibleMessages.length,
     getScrollElement: () => listRef.current,
-    estimateSize: () => 78,
-    overscan: 8
+    estimateSize: () => 96,
+    overscan: 4
   });
 
   const loadOlderMessages = useCallback(async (): Promise<void> => {
@@ -449,47 +515,30 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     }
   }, [activeRoom.session.id, activeRoom.token, hasMoreMessagesByRoom, messages, searchQuery, toast]);
 
-  const scrollToBottom = useCallback(
-    (behavior: ScrollBehavior = "smooth") => {
-      const list = listRef.current;
-      if (!list) return;
-
-      suppressScrollTrackingRef.current = true;
-
-      list.scrollTo({
-        top: list.scrollHeight,
-        behavior
-      });
-
-      window.setTimeout(() => {
-        suppressScrollTrackingRef.current = false;
-      }, 120);
-    },
-    []
-  );
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto"): void => {
+    const list = listRef.current;
+    if (!list) return;
+    list.scrollTo({ top: list.scrollHeight, behavior });
+  }, []);
 
   useEffect(() => {
-    pendingBottomScrollRoomRef.current = activeRoom.session.id;
+    forceBottomRoomRef.current = activeRoom.session.id;
     shouldStickToBottomRef.current = true;
   }, [activeRoom.session.id]);
 
   useLayoutEffect(() => {
     if (!visibleMessages.length || searchQuery.trim()) return;
-    if (pendingBottomScrollRoomRef.current !== activeRoom.session.id) return;
+    if (forceBottomRoomRef.current !== activeRoom.session.id) return;
     scrollToBottom("auto");
-    const timer = window.setTimeout(() => {
-      scrollToBottom("auto");
-      if (pendingBottomScrollRoomRef.current === activeRoom.session.id) {
-        pendingBottomScrollRoomRef.current = null;
-      }
-    }, 80);
-    return () => window.clearTimeout(timer);
+    forceBottomRoomRef.current = null;
   }, [activeRoom.session.id, scrollToBottom, searchQuery, visibleMessages.length]);
 
-  useEffect(() => {
-    if (!shouldStickToBottomRef.current || pendingBottomScrollRoomRef.current === activeRoom.session.id) return;
+  useLayoutEffect(() => {
+    if (!visibleMessages.length || searchQuery.trim()) return;
+    if (forceBottomRoomRef.current === activeRoom.session.id) return;
+    if (!shouldStickToBottomRef.current) return;
     scrollToBottom("auto");
-  }, [activeRoom.session.id, messagesByRoom[activeRoom.session.id]?.length, scrollToBottom, visibleMessages.length]);
+  }, [activeRoom.session.id, messagesByRoom[activeRoom.session.id]?.length, scrollToBottom, searchQuery, visibleMessages.length]);
 
   useEffect(() => {
     const totalUnread = state.rooms.reduce((total, room) => total + room.unread, 0);
@@ -547,12 +596,10 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
   function handleMessageScroll(): void {
     const list = listRef.current;
     if (!list) return;
-    if (!suppressScrollTrackingRef.current) {
-      const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
-      shouldStickToBottomRef.current = distanceFromBottom < 48;
-      if (distanceFromBottom > 140) {
-        pendingBottomScrollRoomRef.current = null;
-      }
+    const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+    shouldStickToBottomRef.current = distanceFromBottom < 72;
+    if (distanceFromBottom > 160) {
+      forceBottomRoomRef.current = null;
     }
     if (list.scrollTop < 96) {
       void loadOlderMessages();
@@ -561,7 +608,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
 
   function selectRoom(roomId: string): void {
     shouldStickToBottomRef.current = true;
-    pendingBottomScrollRoomRef.current = roomId;
+    forceBottomRoomRef.current = roomId;
     onStateChange((current) => ({
       ...current,
       activeRoomId: roomId,
@@ -650,6 +697,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     event.preventDefault();
     const content = draft.trim();
     if (!content && attachments.length === 0) return;
+    shouldStickToBottomRef.current = true;
     socket.emit("message:send", { token: activeRoom.token, content, attachments, replyToId: replyingTo?.id });
     socket.emit("user:typing", { token: activeRoom.token, isTyping: false });
     setDraft("");
@@ -702,6 +750,68 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
   function addEmoji(emoji: string): void {
     setDraft((current) => `${current}${emoji}`);
     setEmojiOpen(false);
+  }
+
+  function syncRoomTheme(nextThemeId: ChatThemeId, nextWallpaper: RoomWallpaperConfig): void {
+    const payload = {
+      token: activeRoom.token,
+      themeType: nextThemeId,
+      wallpaperUrl: nextWallpaper.image ?? null,
+      blur: nextWallpaper.blur,
+      opacity: nextWallpaper.opacity,
+      brightness: nextWallpaper.brightness,
+      saturation: nextWallpaper.saturation,
+      overlay: nextWallpaper.overlay
+    };
+    setTheme(nextThemeId);
+    setRoomThemes((current) => ({
+      ...current,
+      [activeRoom.session.id]: {
+        roomId: activeRoom.session.id,
+        themeType: payload.themeType,
+        wallpaperUrl: payload.wallpaperUrl,
+        blur: payload.blur,
+        opacity: payload.opacity,
+        brightness: payload.brightness,
+        saturation: payload.saturation,
+        overlay: payload.overlay,
+        updatedBy: activeRoom.user.id,
+        updatedAt: new Date().toISOString()
+      }
+    }));
+    socket.emit("room-theme:update", payload);
+  }
+
+  function updatePendingWallpaper(patch: Partial<RoomWallpaperConfig>): void {
+    setPendingWallpapers((current) => ({
+      ...current,
+      [activeRoom.session.id]: {
+        ...(current[activeRoom.session.id] ?? activeWallpaper),
+        ...patch
+      }
+    }));
+  }
+
+  function applyAppearanceChanges(): void {
+    setWallpapers((current) => ({
+      ...current,
+      [activeRoom.session.id]: pendingWallpaper
+    }));
+    syncRoomTheme(pendingTheme, pendingWallpaper);
+  }
+
+  async function handleWallpaperFile(file?: File | null): Promise<void> {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const uploaded = await api.uploadFiles([file]);
+      const image = uploaded.files[0]?.url;
+      if (image) updatePendingWallpaper({ image, preset: undefined });
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Wallpaper upload failed", "error");
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleAttachment(files?: FileList | File[]): Promise<void> {
@@ -786,7 +896,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         onStartDirectChat={(user) => void startDirectChat(user)}
       />
 
-      <section className="chat-area">
+      <section className="chat-area" style={chatBackgroundStyle}>
         <header className="chat-header">
           <div>
             <h1>{activeRoom.session.name}</h1>
@@ -817,9 +927,6 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
             <button className="ghost-button" type="button" title="Profile" aria-label="Open profile" aria-expanded={profileOpen} onClick={() => setProfileOpen((value) => !value)}>
               <UserCircle size={18} />
             </button>
-            <button className="ghost-button" type="button" title="Toggle theme" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-              {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
-            </button>
             <span className={connected ? "status connected" : "status"}>
               {connected ? <Wifi size={16} /> : <WifiOff size={16} />}
               {connected ? "Online" : "Offline"}
@@ -842,25 +949,24 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
             {messageVirtualizer.getVirtualItems().map((virtualRow) => {
               const message = visibleMessages[virtualRow.index];
               if (!message) return null;
-              const isLatestMessage = virtualRow.index === visibleMessages.length - 1;
+              const shouldMeasureRow = Boolean(message.attachments?.length || message.replyToId || message.content.length > 180 || message.reactions && Object.keys(message.reactions).length > 0);
               return (
                 <div
                   className="virtual-message-row"
                   data-index={virtualRow.index}
                   id={`message-${message.id}`}
                   key={message.id}
-                  ref={(element) => {
-                    messageVirtualizer.measureElement(element);
-                    if (isLatestMessage) {
-                      latestMessageRef.current = element;
-                    } else if (latestMessageRef.current === element) {
-                      latestMessageRef.current = null;
-                    }
-                  }}
+                  ref={shouldMeasureRow ? messageVirtualizer.measureElement : undefined}
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                 >
-                  <MessageBubble
-                    message={message}
+                  {Object.values(message.reactions ?? {}).includes("system") ? (
+                    <div className="system-message">
+                      <span>{message.content}</span>
+                      <time>{new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(message.createdAt))}</time>
+                    </div>
+                  ) : (
+                    <MessageBubble
+                      message={message}
                     own={message.senderId === activeRoom.user.id}
                     currentUserId={activeRoom.user.id}
                     senderAvatarUrl={avatarUrlByUserId.get(message.senderId)}
@@ -876,6 +982,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
                     onJumpToMessage={jumpToMessage}
                     onReactionSummaryOpen={setReactionViewer}
                   />
+                  )}
                 </div>
               );
             })}
@@ -1011,11 +1118,60 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
             <div className="settings-section">
               <div>
                 <strong>Theme</strong>
-                <p>Current mode: {theme}</p>
+                <p>{activeTheme.name}: {activeTheme.description}</p>
               </div>
-              <button className="secondary-button compact" type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-                Switch to {theme === "dark" ? "light" : "dark"}
-              </button>
+              <select className="premium-select" value={pendingTheme} onChange={(event) => setPendingTheme(event.target.value as ChatThemeId)}>
+                {CHAT_THEMES.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+              </select>
+              <div className="settings-actions">
+                <button className="primary-button compact" type="button" disabled={!hasAppearanceChanges} onClick={applyAppearanceChanges}>
+                  Apply
+                </button>
+              </div>
+            </div>
+            <div className="settings-section">
+              <div>
+                <strong>Room wallpaper</strong>
+                <p>Wallpaper applies only to this conversation and is stored locally.</p>
+              </div>
+              <div className="wallpaper-grid">
+                {WALLPAPER_PRESETS.map((preset) => (
+                  <button className={pendingWallpaper.preset === preset.id && !pendingWallpaper.image ? "wallpaper-tile active" : "wallpaper-tile"} type="button" key={preset.id} style={{ background: preset.image }} onClick={() => updatePendingWallpaper({ preset: preset.id, image: undefined })}>
+                    <span>{preset.name}</span>
+                  </button>
+                ))}
+              </div>
+              <label className="field">
+                <span>Custom image URL</span>
+                <div className="input-wrap">
+                  <input value={customWallpaperUrl} onChange={(event) => setCustomWallpaperUrl(event.target.value)} placeholder="https://..." />
+                </div>
+              </label>
+              <label className="field">
+                <span>Upload local wallpaper</span>
+                <div className="input-wrap">
+                  <input type="file" accept="image/*" onChange={(event) => void handleWallpaperFile(event.target.files?.[0])} />
+                </div>
+              </label>
+              <div className="settings-actions">
+                <button className="secondary-button compact" type="button" onClick={() => {
+                  const image = customWallpaperUrl.trim();
+                  if (image) updatePendingWallpaper({ image, preset: undefined });
+                }}>
+                  Preview URL
+                </button>
+                <button className="secondary-button compact" type="button" onClick={() => updatePendingWallpaper(DEFAULT_WALLPAPER)}>
+                  Reset preview
+                </button>
+              </div>
+              <label className="field">
+                <span>Blur {pendingWallpaper.blur}px</span>
+                <input className="range-control" type="range" min="0" max="24" value={pendingWallpaper.blur} onChange={(event) => updatePendingWallpaper({ blur: Number(event.target.value) })} />
+              </label>
+              <label className="field">
+                <span>Opacity {Math.round(pendingWallpaper.opacity * 100)}%</span>
+                <input className="range-control" type="range" min="0.2" max="0.9" step="0.05" value={pendingWallpaper.opacity} onChange={(event) => updatePendingWallpaper({ opacity: Number(event.target.value) })} />
+              </label>
             </div>
             <div className="settings-section">
               <div>
