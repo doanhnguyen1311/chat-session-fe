@@ -32,14 +32,14 @@ export function OnlineUsers({ users, currentUserId, canKick, onKick, onTransferA
               <span>{user.displayName}</span>
               <em>{user.isOnline ? "Online" : "Offline"}</em>
             </span>
-            {user.isAdmin ? <Shield size={14} /> : null}
+            {user.isAdmin ? <Shield size={14} aria-label="Admin" /> : null}
             {user.id === currentUserId ? <em>You</em> : null}
             {canKick && user.id !== currentUserId ? (
               <>
-                <button className="kick-button" type="button" onClick={() => onTransferAdmin(user.id)} title="Transfer admin">
+                <button className="kick-button" type="button" onClick={() => onTransferAdmin(user.id)} title="Transfer admin" aria-label={`Transfer admin to ${user.displayName}`}>
                   <Crown size={14} />
                 </button>
-                <button className="kick-button" type="button" onClick={() => onKick(user.id)} title="Kick user">
+                <button className="kick-button" type="button" onClick={() => onKick(user.id)} title="Kick user" aria-label={`Kick ${user.displayName}`}>
                   <UserX size={14} />
                 </button>
               </>

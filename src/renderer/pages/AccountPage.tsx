@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { LogIn, UserPlus } from "lucide-react";
+import { LockKeyhole, LogIn, Sparkles, UserPlus } from "lucide-react";
 import { api } from "../services/api";
 import type { AccountAuthResponse } from "../types/chat";
 
@@ -36,9 +36,13 @@ export function AccountPage({ onAuthenticated }: Props): JSX.Element {
   return (
     <main className="login-shell">
       <form className="login-panel" onSubmit={handleSubmit}>
-        <div>
-          <p className="eyebrow">Session Chat</p>
-          <h1>{mode === "login" ? "Sign in" : "Create account"}</h1>
+        <div className="login-hero">
+          <span className="login-orb" aria-hidden="true"><Sparkles size={22} /></span>
+          <div>
+            <p className="eyebrow">Session Chat</p>
+            <h1>{mode === "login" ? "Welcome back" : "Create your workspace"}</h1>
+            <p>Private realtime conversations with a polished desktop workflow.</p>
+          </div>
         </div>
 
         <div className="mode-switch" role="tablist" aria-label="Account mode">
@@ -78,8 +82,8 @@ export function AccountPage({ onAuthenticated }: Props): JSX.Element {
         {error ? <div className="error">{error}</div> : null}
 
         <button className="primary-button" type="submit" disabled={loading}>
-          {mode === "login" ? <LogIn size={18} /> : <UserPlus size={18} />}
-          {loading ? "Please wait..." : mode === "login" ? "Login" : "Register"}
+          {loading ? <LockKeyhole size={18} /> : mode === "login" ? <LogIn size={18} /> : <UserPlus size={18} />}
+          {loading ? "Securing session..." : mode === "login" ? "Enter workspace" : "Create secure account"}
         </button>
       </form>
     </main>

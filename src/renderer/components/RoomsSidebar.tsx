@@ -1,4 +1,4 @@
-import { LogOut, MessageSquarePlus, Plus, Search, UserRound } from "lucide-react";
+import { Hash, LogOut, MessageSquarePlus, Plus, Search, UserRound } from "lucide-react";
 import { motion } from "framer-motion";
 import type { RoomAuth } from "../App";
 import type { AccountSearchResult } from "../types/chat";
@@ -25,7 +25,7 @@ export function RoomsSidebar({ rooms, activeRoomId, onSelect, onCreate, onJoin, 
   return (
     <aside className="rooms-sidebar">
       <div className="rooms-title">
-        <span className="brand-mark">S</span>
+        <span className="brand-mark" aria-hidden="true">S</span>
         <span>Rooms</span>
       </div>
 
@@ -47,7 +47,7 @@ export function RoomsSidebar({ rooms, activeRoomId, onSelect, onCreate, onJoin, 
       <div className="user-search-panel">
         <div className="search-box">
           <Search size={16} />
-          <input value={userSearchQuery} onChange={(event) => onUserSearchChange(event.target.value)} placeholder="Tìm người để nhắn riêng" />
+          <input value={userSearchQuery} onChange={(event) => onUserSearchChange(event.target.value)} placeholder="Tìm người để nhắn riêng" aria-label="Tìm người để nhắn riêng" />
         </div>
         {userSearchQuery.trim().length >= 2 ? (
           <div className="user-search-results">
@@ -98,9 +98,12 @@ function RoomSection({ title, rooms, activeRoomId, onSelect }: RoomSectionProps)
             key={room.session.id}
             type="button"
             onClick={() => onSelect(room.session.id)}
-            whileHover={{ x: 2 }}
+            whileHover={{ x: 3, scale: 1.01 }}
             whileTap={{ scale: 0.985 }}
+            transition={{ type: "spring", stiffness: 520, damping: 34 }}
+            aria-current={room.session.id === activeRoomId ? "page" : undefined}
           >
+            <em className="room-glyph"><Hash size={14} /></em>
             <span>{room.session.name}</span>
             {room.unread > 0 ? <strong>{room.unread}</strong> : null}
           </motion.button>

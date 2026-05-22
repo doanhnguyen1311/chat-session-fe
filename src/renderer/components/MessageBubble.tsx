@@ -65,7 +65,9 @@ export function MessageBubble({ message, own, currentUserId, senderAvatarUrl, re
       ? senderAvatarUrl
       : `${import.meta.env.VITE_BACKEND_URL ?? "https://apiprivate.delisocial.id.vn"}${senderAvatarUrl}`
     : null;
-    
+
+
+
   return (
     <div className={own ? "message-with-avatar own" : "message-with-avatar"}>
       <span className="message-avatar avatar">

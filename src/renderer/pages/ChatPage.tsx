@@ -30,7 +30,7 @@ import { RoomsSidebar } from "../components/RoomsSidebar";
 import { Toast, ToastHost } from "../components/ToastHost";
 import { UpdateSettings } from "../components/UpdateSettings";
 
-const MESSAGE_PAGE_SIZE = 20;
+const MESSAGE_PAGE_SIZE = 10;
 const REACTION_LABELS = {
   like: { icon: "👍", label: "Thích" },
   love: { icon: "❤️", label: "Yêu thích" },
@@ -128,12 +128,14 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [reactionViewer, setReactionViewer] = useState<Message | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const latestMessageRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const typingTimer = useRef<number | null>(null);
   const toastTimers = useRef<number[]>([]);
   const loadingMoreRef = useRef<Record<string, boolean>>({});
   const shouldStickToBottomRef = useRef(true);
-  const initialScrolledRoomsRef = useRef<Set<string>>(new Set());
+  const pendingBottomScrollRoomRef = useRef<string | null>(activeRoom.session.id);
+  const suppressScrollTrackingRef = useRef(false);
   const loadedRoomsRef = useRef<Set<string>>(new Set());
   const roomsRef = useRef(state.rooms);
   const activeRoomIdRef = useRef(activeRoom.session.id);
@@ -447,29 +449,46 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
     }
   }, [activeRoom.session.id, activeRoom.token, hasMoreMessagesByRoom, messages, searchQuery, toast]);
 
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto"): void => {
-    if (!visibleMessages.length) return;
-    messageVirtualizer.scrollToIndex(visibleMessages.length - 1, { align: "end" });
-    window.requestAnimationFrame(() => {
-      listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior });
-      window.requestAnimationFrame(() => {
-        listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior });
+  const scrollToBottom = useCallback(
+    (behavior: ScrollBehavior = "smooth") => {
+      const list = listRef.current;
+      if (!list) return;
+
+      suppressScrollTrackingRef.current = true;
+
+      list.scrollTo({
+        top: list.scrollHeight,
+        behavior
       });
-    });
-  }, [messageVirtualizer, visibleMessages.length]);
+
+      window.setTimeout(() => {
+        suppressScrollTrackingRef.current = false;
+      }, 120);
+    },
+    []
+  );
+
+  useEffect(() => {
+    pendingBottomScrollRoomRef.current = activeRoom.session.id;
+    shouldStickToBottomRef.current = true;
+  }, [activeRoom.session.id]);
 
   useLayoutEffect(() => {
     if (!visibleMessages.length || searchQuery.trim()) return;
-    const roomId = activeRoom.session.id;
-    if (initialScrolledRoomsRef.current.has(roomId)) return;
-    initialScrolledRoomsRef.current.add(roomId);
-    shouldStickToBottomRef.current = true;
+    if (pendingBottomScrollRoomRef.current !== activeRoom.session.id) return;
     scrollToBottom("auto");
+    const timer = window.setTimeout(() => {
+      scrollToBottom("auto");
+      if (pendingBottomScrollRoomRef.current === activeRoom.session.id) {
+        pendingBottomScrollRoomRef.current = null;
+      }
+    }, 80);
+    return () => window.clearTimeout(timer);
   }, [activeRoom.session.id, scrollToBottom, searchQuery, visibleMessages.length]);
 
   useEffect(() => {
-    if (!shouldStickToBottomRef.current || !initialScrolledRoomsRef.current.has(activeRoom.session.id)) return;
-    scrollToBottom("smooth");
+    if (!shouldStickToBottomRef.current || pendingBottomScrollRoomRef.current === activeRoom.session.id) return;
+    scrollToBottom("auto");
   }, [activeRoom.session.id, messagesByRoom[activeRoom.session.id]?.length, scrollToBottom, visibleMessages.length]);
 
   useEffect(() => {
@@ -528,7 +547,13 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
   function handleMessageScroll(): void {
     const list = listRef.current;
     if (!list) return;
-    shouldStickToBottomRef.current = list.scrollHeight - list.scrollTop - list.clientHeight < 96;
+    if (!suppressScrollTrackingRef.current) {
+      const distanceFromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+      shouldStickToBottomRef.current = distanceFromBottom < 48;
+      if (distanceFromBottom > 140) {
+        pendingBottomScrollRoomRef.current = null;
+      }
+    }
     if (list.scrollTop < 96) {
       void loadOlderMessages();
     }
@@ -536,6 +561,7 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
 
   function selectRoom(roomId: string): void {
     shouldStickToBottomRef.current = true;
+    pendingBottomScrollRoomRef.current = roomId;
     onStateChange((current) => ({
       ...current,
       activeRoomId: roomId,
@@ -779,19 +805,19 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
             ) : null}
           </div>
           <div className="header-actions">
-            <button className="ghost-button" type="button" title="Search" onClick={() => setSearchOpen(true)}>
+            <button className="ghost-button" type="button" title="Search" aria-label="Search messages" onClick={() => setSearchOpen(true)}>
               <Search size={17} />
             </button>
-            <button className="ghost-button" type="button" title="Start call" onClick={() => setCallOpen(true)}>
+            <button className="ghost-button" type="button" title="Start call" aria-label="Open voice call preview" onClick={() => setCallOpen(true)}>
               <Phone size={17} />
             </button>
-            <button className="ghost-button" type="button" title="Settings" onClick={() => setSettingsOpen((value) => !value)}>
+            <button className="ghost-button" type="button" title="Settings" aria-label="Open settings" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((value) => !value)}>
               <Settings size={17} />
             </button>
-            <button className="ghost-button" type="button" title="Profile" onClick={() => setProfileOpen((value) => !value)}>
+            <button className="ghost-button" type="button" title="Profile" aria-label="Open profile" aria-expanded={profileOpen} onClick={() => setProfileOpen((value) => !value)}>
               <UserCircle size={18} />
             </button>
-            <button className="ghost-button" type="button" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            <button className="ghost-button" type="button" title="Toggle theme" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
             </button>
             <span className={connected ? "status connected" : "status"}>
@@ -804,24 +830,33 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
         <div className="message-list" ref={listRef} onScroll={handleMessageScroll}>
           {loadingMoreByRoom[activeRoom.session.id] ? <div className="typing-line">Loading older messages...</div> : null}
           {visibleMessages.length === 0 ? (
-            <div className="floating-panel empty-state-panel" style={{ position: "static", width: "min(420px, 100%)", margin: "auto" }}>
+            <div className="floating-panel empty-state-panel" style={{ position: "static", width: "min(440px, 100%)", margin: "auto" }}>
+              <div className="empty-state-orb" aria-hidden="true" />
               <h2>{searchQuery ? "No messages found" : "No messages yet"}</h2>
-              <p>{searchQuery ? "Try another search term." : "Start the conversation with a short message."}</p>
-              <div className="skeleton" style={{ height: 12, borderRadius: 999 }} />
-              <div className="skeleton" style={{ height: 12, width: "72%", borderRadius: 999 }} />
+              <p>{searchQuery ? "Try another search term or clear search to return to the full conversation." : "Send the first message and start a polished realtime conversation."}</p>
+              <div className="skeleton" style={{ height: 12, width: "86%", borderRadius: 999 }} />
+              <div className="skeleton" style={{ height: 12, width: "64%", borderRadius: 999 }} />
             </div>
           ) : null}
           <div className="virtual-message-space" style={{ height: messageVirtualizer.getTotalSize() }}>
             {messageVirtualizer.getVirtualItems().map((virtualRow) => {
               const message = visibleMessages[virtualRow.index];
               if (!message) return null;
+              const isLatestMessage = virtualRow.index === visibleMessages.length - 1;
               return (
                 <div
                   className="virtual-message-row"
                   data-index={virtualRow.index}
                   id={`message-${message.id}`}
                   key={message.id}
-                  ref={messageVirtualizer.measureElement}
+                  ref={(element) => {
+                    messageVirtualizer.measureElement(element);
+                    if (isLatestMessage) {
+                      latestMessageRef.current = element;
+                    } else if (latestMessageRef.current === element) {
+                      latestMessageRef.current = null;
+                    }
+                  }}
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                 >
                   <MessageBubble
@@ -894,17 +929,17 @@ export function ChatPage({ state, activeRoom, onStateChange, onJoined, onLogout 
               event.currentTarget.value = "";
             }}
           />
-          <button className="ghost-button" type="button" title="Attach file" onClick={() => fileInputRef.current?.click()}>
+          <button className="ghost-button" type="button" title="Attach file" aria-label="Attach file" onClick={() => fileInputRef.current?.click()}>
             <Paperclip size={17} />
           </button>
-          <button className="ghost-button" type="button" title="Tag user" onClick={() => setMentionOpen((value) => !value)}>
+          <button className="ghost-button" type="button" title="Tag user" aria-label="Mention a user" aria-expanded={mentionOpen} onClick={() => setMentionOpen((value) => !value)}>
             <AtSign size={17} />
           </button>
-          <input value={draft} onChange={(event) => handleTyping(event.target.value)} maxLength={1000} placeholder="Write a message" />
-          <button className="ghost-button" type="button" title="Emoji" onClick={() => setEmojiOpen((value) => !value)}>
+          <input value={draft} onChange={(event) => handleTyping(event.target.value)} maxLength={1000} placeholder="Write a message" aria-label="Message composer" />
+          <button className="ghost-button" type="button" title="Emoji" aria-label="Open emoji picker" aria-expanded={emojiOpen} onClick={() => setEmojiOpen((value) => !value)}>
             <Smile size={17} />
           </button>
-          <button className="send-button" type="submit" title="Send message" disabled={uploading}>
+          <button className="send-button" type="submit" title="Send message" aria-label="Send message" disabled={uploading}>
             <Send size={18} />
           </button>
         </form>
